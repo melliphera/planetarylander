@@ -1,0 +1,202 @@
+use crate::utils::Vec3D;
+use arrayvec::ArrayVec;
+use fixedstr::str16;
+
+#[derive(Debug)]
+pub struct Body {
+    pub name: str16,
+    pub gravity: f64,    // G*m_1; divide by d^2 for acceleration of external body.
+    pub position: Vec3D, // location in
+    pub velocity: Vec3D,
+    pub parent_id: Option<usize>,
+    pub orbit_influencers: ArrayVec<usize, 20>,
+}
+
+impl Body {
+    const fn new(
+        name: &str,
+        gravity: f64,
+        position: Vec3D,
+        velocity: Vec3D,
+        parent_id: usize,
+    ) -> Self {
+        // valid function for any Body with a parent - all but Sol
+        Body {
+            name: str16::const_make(name),
+            gravity,
+            position,
+            velocity,
+            parent_id: Some(parent_id),
+            orbit_influencers: ArrayVec::new_const(),
+        }
+    }
+
+    pub fn fill_influencers(&mut self, body_list: &[Body; 10]) {
+        //! each body is influenced by their parent, siblings and children
+        let self_id = body_list
+            .iter()
+            .enumerate()
+            .find(|(_i, obj)| obj.name == self.name)
+            .unwrap()
+            .0;
+
+        for (i, body) in body_list.iter().enumerate() {
+            // each body is influenced by their parent, siblings and children
+            if Some(i) == self.parent_id
+                || body.parent_id == self.parent_id
+                || body.parent_id == Some(self_id)
+            {
+                self.orbit_influencers.push(i)
+            }
+        }
+    }
+}
+
+pub const N_BODIES: usize = 10;
+pub const BODIES: [Body; N_BODIES] = [
+    // ESTABLISHING Sun Centre at Epoch (SCE) as a static reference frame for the entire simulation.
+    // Epoch used for this and all other initial data is Jan-1-2000 00:00.
+    Body {
+        name: str16::const_make("Sol"),
+        gravity: 1.32706e20,
+        position: Vec3D(0.0, 0.0, 0.0),
+        velocity: Vec3D(0.0, 0.0, 0.0),
+        parent_id: None,
+        orbit_influencers: ArrayVec::new_const(),
+    },
+    Body::new(
+        "Mercury",
+        2.20375e13,
+        Vec3D(
+            -2.105262107244070E+10,
+            -6.640663812253430E+10,
+            -3.492445946577720E+09,
+        ),
+        Vec3D(
+            3.665298704187096E+04,
+            -1.228983806940175E+04,
+            -4.368173036243590E+03,
+        ),
+        0,
+    ),
+    Body::new(
+        "Venus",
+        3.24924e14,
+        Vec3D(
+            -1.075055502719850E+11,
+            -3.366520666522362E+09,
+            6.159219789239045E+09,
+        ),
+        Vec3D(
+            8.891597859686224E+02,
+            -3.515920774137907E+04,
+            -5.318594228644749E+02,
+        ),
+        0,
+    ),
+    Body::new(
+        "Earth",
+        3.98438e14,
+        Vec3D(
+            -2.521092855899356E+10,
+            1.449279195838006E+11,
+            -6.164165719002485E+05,
+        ),
+        Vec3D(
+            -2.983983333677879E+04,
+            -5.207633902410673E+03,
+            6.168441184239981E-02,
+        ),
+        0,
+    ),
+    Body::new(
+        "Mars",
+        4.27277e13,
+        Vec3D(
+            2.079950549836171E+11,
+            -3.143009713942494E+09,
+            -5.178781243488781E+09,
+        ),
+        Vec3D(
+            1.295003552976085E+03,
+            2.629442066947034E+04,
+            5.190097459225722E+02,
+        ),
+        0,
+    ),
+    Body::new(
+        "Jupiter",
+        1.26139e17,
+        Vec3D(
+            5.989091645401344E+11,
+            4.391225866604841E+11,
+            -1.523251063025475E+10,
+        ),
+        Vec3D(
+            -7.901937516136118E+03,
+            1.116317703172796E+04,
+            1.306732148714280E+02,
+        ),
+        0,
+    ),
+    Body::new(
+        "Saturn",
+        3.793e16,
+        Vec3D(
+            9.587063371733198E+11,
+            9.825652104588115E+11,
+            -5.522065631225652E+10,
+        ),
+        Vec3D(
+            -7.428885680409909E+03,
+            6.738814240733793E+03,
+            1.776643606866641E+02,
+        ),
+        0,
+    ),
+    Body::new(
+        "Uranus",
+        5.7939e15,
+        Vec3D(
+            2.158774481135687E+12,
+            -2.054825439980978E+12,
+            -3.562364902696741E+10,
+        ),
+        Vec3D(
+            4.637647623549194E+03,
+            4.627191832186803E+03,
+            -4.285552181289254E+01,
+        ),
+        0,
+    ),
+    Body::new(
+        "Neptune",
+        6.83478e15,
+        Vec3D(
+            2.514853560731005E+12,
+            -3.738847414418683E+12,
+            1.903940653525472E+10,
+        ),
+        Vec3D(
+            4.465802635365747E+03,
+            3.075682319816144E+03,
+            -1.665662221033826E+02,
+        ),
+        0,
+    ),
+    Body::new(
+        "Pluto",
+        8.72292e11,
+        Vec3D(
+            -1.477558207142231E+12,
+            -4.182460280867265E+12,
+            8.752693291814536E+11,
+        ),
+        Vec3D(
+            5.261903258542794E+03,
+            -2.648936864051314E+03,
+            -1.241856559011054E+03,
+        ),
+        0,
+    ),
+];

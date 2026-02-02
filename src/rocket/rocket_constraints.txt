@@ -1,0 +1,93 @@
+SOFTWARE MANDATE
+1. To add the challenge of thoughtful concurrency, each piece of information acquired by the flight controller will be managed by a piece of modelled hardware, running on its own thread.
+2. This hardware, designed in the 1960s and exposed to all the physical challenges of outer space, must have some level of inconsistency/usability modelled.
+3. This inconsistency will come in the form of:
+    a. Small variations in accuracy from generic readings based on environmental conditions; eg an altimeter might produce some amount of variance which is greater at greater height.
+    b. Occasional hanging/crashing/rebooting. These will be modelled by a thread::sleep() on the hardware thread; it is essential this does not impact the operation of the craft.
+    c. Occasional garbage data of the correct form. It is essential that the flight controller validates not just that data is present but that it is reasonable.
+    d. Feedback from each piece of hardware will come at some polling rate, but will always vary from this by a small amount (+-5%). Occasionally there will be bursts of greater variance.
+    e. Hardware is susceptible to "drift", where some continuously growing offset is added to each reading.
+4. To avoid certain ways of trivialising the challenge, each data point must only be measured by 1 piece of hardware, and the polling rate of the flight controller must be the same as the spec'd polling rate of the instruments. 
+5. There are two different mechanisms to counteract drift:
+    a. Manual (human-agent) star reading, takes 15 minutes to do, corrects ship position and orientation. Can be done 8 times per day.
+    b. Contact Mission Control, sends a signal to Earth, computes 1 minute, signal comes back. Corrects position and velocity; can be done once per day.
+6. Limited CPU time/power will be simulated; each computational operation will have an associated cost of "compute tokens", which regenerate over time. Computer must be selective over what data it processes.
+
+Furthermore, as the rocket has life-critical software, and any failure of the mission likely results in death, all code pertaining to the rocket and its hardware will follow a Rust adaptation of MISRA-C standards, herein dubbed MISRA-RUST and presented below.
+The author wishes to point out, as obvious as it may be, that the following MISRA-RUST specification has no affiliation with MISRA itself and is purely an inspired work. 
+
+MISRA-RUST
+a. All code comments mandated by this specification must start with "(MR RULEBLOCK.number)", as in the following code snippet: 
+
+let c: u32 = b.saturating_sub(a) // (MR B.3) scheduler time remaining; a saturated 0 means the event should run immediately, same as unsaturated.
+
+A. UNDEFINED BEHAVIOUR SAFETY/TYPE SAFETY
+1. Use of unsafe code must be avoided unless absolutely necessary. All unsafe code should have thorough documentation and tests proving safety in all cases.
+2. Use of the "as" keyword for type conversion is explicitly prohibited. From/Into traits or self-written conversion methods must be used instead.
+3. All numeric conversions must use try_from() or explicitly handle truncation.
+
+B. EXPLICIT FAILURE HANDLING
+1. Production code paths shall not use panic!(), unwrap(), expect(), or unreachable!().
+2. Array/slice access shall use get() returning Option or proven-safe indexing.
+3. Arithmetic shall use checked_*, saturating_*, or wrapping_* methods, with comments explaining why overflow cannot occur OR why the chosen overflow behavior is correct for this use case.4. Division operations shall verify non-zero denominator.
+5. Results must never be dropped unhandled. Error variants must carry relevant diagnostic information.
+
+C. NUMERIC ACCURACY
+1. Floating point equality must be done within bounds of tolerance, to avoid floating point errors propagating to incorrect inequality.
+2. Operations capable of producing non-numeric values (NaN/inf) must have these results handled before being used. "Capability" is defined by the function, unless numeric bounds are provable; e.g. (0 < a < b always, therefore b-a must always be numeric).
+
+D. CONTROL FLOW
+1. Control structures must not be nested greater than 4 levels.
+2. All matches should be explicitly exhaustive; even where avoiding "_" is more verbose.
+3. All loops excluding the mainloop must have finite deterministic upper bounds.
+4. Break and continue must not be nested more than 2 levels beyond the loop they control.
+
+E. FUNCTION/METHOD DESIGN
+1. Each function must have exactly 1 purpose, stated in its doc-comment.
+2. Each function may only have a maximum of 60 lines. Formatting must not be sacrificed to this end.
+3. Struct methods must not mutate public fields unless that is their primary purpose (See E.4 below).
+4. Struct methods may only mutate a maximum of 1 public field, and if done, must return that field. 
+
+F. MEMORY MANAGEMENT
+1. All data must be stored on the stack. 
+2. All struct fields must be owned values, or &static references.
+3. Copy small types, reference large types. A small/large boundary of 48B is proposed.
+4. Structs should have their sizes commented to ease compliance with F.3
+
+G. CHANNELED CONCURRENCY
+1. Concurrency must be minimised wherever possible. Within the scope of this project, each piece of hardware must run on exactly 1 thread.
+2. Any instances of a thread waiting for another must be bounded by a reasonable timeout, with a comment explaining why the chosen timeout is reasonable. 
+3. Whenever there is two-way communication between threads, it must be proven and shown in comment how deadlock is impossible.
+
+H. TESTING 
+1: Minimum Coverage
+   All safety-critical code must have ≥80% line coverage.
+   100% coverage required for:
+   - Flight control logic
+   - Sensor failure handling  
+   - Arithmetic operations with overflow handling
+   - State transitions in finite state machines
+2: Test Categories Required
+   Each function must have tests for:
+   a. Normal operation (happy path)
+   b. Boundary conditions (max/min values, limits)
+   c. Error cases (sensor failures, invalid input)
+   d. Timing edge cases (sensor timeouts, rapid updates)
+3: Safety-Critical Test Requirements
+   Functions handling critical operations must test:
+   - All error paths (MR B.1 - no unwrap)
+   - All overflow cases (MR B.3 - checked/saturating)
+   - All match arms (MR D.2 - exhaustive)
+   - All division operations (MR B.4 - zero check)
+4: Sensor Simulation Tests
+   Each hardware component must have tests for:
+   - Normal readings with expected variance
+   - Drift over time (if applicable)
+   - Garbage data within valid type
+   - Thread hang simulation
+   - Timing variance (±5% polling rate)
+5: Coverage Measurement
+   Use cargo-tarpaulin or cargo-llvm-cov to measure coverage.
+   Generate HTML reports for manual review of uncovered lines.
+   
+   Command: cargo tarpaulin --out Html --output-dir coverage
