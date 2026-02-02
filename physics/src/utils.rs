@@ -2,6 +2,12 @@
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
 pub struct Vec3D(pub f64, pub f64, pub f64);
 
+impl Default for Vec3D {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Vec3D {
     pub fn new() -> Self {
         Self(0.0, 0.0, 0.0)
