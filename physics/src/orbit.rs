@@ -12,11 +12,11 @@ pub fn simulate(print_type: PrintType, print_interval: usize) {
     let mut bodies = BODIES; // copy for mutability
     for body in bodies.iter_mut() {
         body.fill_influencers(&BODIES);
-    };
+    }
 
     // create mutable registers for tracking and editing data.
     let mut accelerations: [Vec3D; N_BODIES] = core::array::from_fn(|_| Vec3D::new()); // used to produce velocity changes
-    let mut energies: [f64; N_BODIES] = [0.0; N_BODIES];   // used to check conservation.
+    let mut energies: [f64; N_BODIES] = [0.0; N_BODIES]; // used to check conservation.
     let mut last_total_energy: f64 = 0.0; // to check conservation/drift.
 
     for step in 0..STEPS {
@@ -25,18 +25,27 @@ pub fn simulate(print_type: PrintType, print_interval: usize) {
             match print_type {
                 PrintType::GraphSingle(p_index) => {
                     let pb = &bodies[p_index];
-                    println!("{}, {}, {}, {}", pb.name[..3].to_uppercase(), pb.position.0, pb.position.1, pb.position.2)
+                    println!(
+                        "{}, {}, {}, {}",
+                        pb.name[..3].to_uppercase(),
+                        pb.position.0,
+                        pb.position.1,
+                        pb.position.2
+                    )
                 }
                 PrintType::GraphAll => {
                     for pb in bodies.iter() {
-                        println!("{}, {}, {}, {}", pb.name[..3].to_uppercase(), pb.position.0, pb.position.1, pb.position.2)
+                        println!(
+                            "{}, {}, {}, {}",
+                            pb.name[..3].to_uppercase(),
+                            pb.position.0,
+                            pb.position.1,
+                            pb.position.2
+                        )
                     }
                 }
             }
         }
-
-
-
 
         // ALL BELOW CALCULATIONS ARE FOR THE NEXT STEP
 
@@ -51,20 +60,20 @@ pub fn simulate(print_type: PrintType, print_interval: usize) {
             let mut accel = Vec3D(0.0, 0.0, 0.0);
             let mut current_potential = 0f64; // stored as per kg of self, expanded later to full body.
 
-            for (j, other) in others_iterator.enumerate() { 
+            for (j, other) in others_iterator.enumerate() {
                 let dir_vec = current.position.vector_to(&other.position);
                 let distance = dir_vec.magnitude();
                 accel = accel.add(&dir_vec.scale(other.gravity / (distance.powi(3))));
                 // only calculate potential against earlier planets; avoids double-counting
                 if j < i {
-                    current_potential -= other.gravity/distance;
+                    current_potential -= other.gravity / distance;
                 }
             }
             // calculate current energy
             let vel = current.velocity.magnitude();
 
             //               GPE/kg             kinetic/kg             kg
-            energies[i] = (current_potential + vel * vel/2.0) * (current.gravity/BIG_G);
+            energies[i] = (current_potential + vel * vel / 2.0) * (current.gravity / BIG_G);
 
             // store acceleration for future calculations
             accelerations[i] = accel;
@@ -90,7 +99,7 @@ pub fn simulate(print_type: PrintType, print_interval: usize) {
             let others_iterator = left.iter().chain(rest.iter());
             let mut accel_second = Vec3D(0.0, 0.0, 0.0);
 
-            for other in others_iterator { 
+            for other in others_iterator {
                 let dir_vec = current.position.vector_to(&other.position);
                 let distance = dir_vec.magnitude();
                 accel_second = accel_second.add(&dir_vec.scale(other.gravity / (distance.powi(3))));
@@ -104,7 +113,12 @@ pub fn simulate(print_type: PrintType, print_interval: usize) {
         let new_sum: f64 = energies.iter().sum();
 
         if step > 0 && step % print_interval == 0 {
-            println!("System energy: {:.6e}\t change: {:.6e} ({:+.2}%)", new_sum, new_sum-last_total_energy, (new_sum/last_total_energy-1.0)*100.0)
+            println!(
+                "System energy: {:.6e}\t change: {:.6e} ({:+.2}%)",
+                new_sum,
+                new_sum - last_total_energy,
+                (new_sum / last_total_energy - 1.0) * 100.0
+            )
         }
 
         last_total_energy = new_sum;

@@ -1,5 +1,5 @@
 use agc_physics::{simulate, utils};
 
-fn main () {
+fn main() {
     simulate(utils::PrintType::GraphSingle(3), 2000);
 }

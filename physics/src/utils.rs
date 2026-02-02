@@ -3,7 +3,9 @@
 pub struct Vec3D(pub f64, pub f64, pub f64);
 
 impl Vec3D {
-    pub fn new() -> Self { Self(0.0, 0.0, 0.0)}
+    pub fn new() -> Self {
+        Self(0.0, 0.0, 0.0)
+    }
 
     pub fn add(&self, other: &Self) -> Self {
         //! composes two vectors. Used for applying forces between two bodies.
@@ -37,7 +39,7 @@ impl Vec3D {
 
 pub enum PrintType {
     GraphSingle(usize),
-    GraphAll
+    GraphAll,
 }
 
 #[cfg(test)]
