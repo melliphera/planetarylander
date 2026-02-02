@@ -4,6 +4,4 @@ pub mod utils;
 
 pub use orbit::simulate;
 
-fn main() {
-    simulate(utils::PrintType::GraphSingle(3), 2000);
-}
+

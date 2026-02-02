@@ -61,6 +61,8 @@ Flight-critical code adheres to a Rust adaptation of MISRA-C guidelines, emphasi
 
 *Note: MISRA-Rust is an inspired adaptation by the project author and has no affiliation with The MISRA Consortium.*
 
+*Furthermore, the exact spec can be found in ./rocket/rocket_constraints.txt*
+
 ## Mission Profile
 
 The simulation challenges the flight controller to:

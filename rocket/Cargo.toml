@@ -25,6 +25,6 @@ expect_used = "deny"
 float_arithmetic = "warn"
 integer_division = "warn"
 
-[lib]
+[[bin]]
 name = "agc_rocket"
-path = "src/lib.rs"
+path = "src/main.rs"
