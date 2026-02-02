@@ -1,0 +1,30 @@
+[package]
+name = "agc-rocket"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+agc-physics = { path = "../physics" } 
+
+[dev-dependencies]
+criterion = "0.5"  # For benchmarks
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[lints.clippy]
+arithmetic_side_effects = "warn"
+as_conversions = "warn"
+indexing_slicing = "warn"
+panic = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+float_arithmetic = "warn"
+integer_division = "warn"
+
+[lib]
+name = "agc_rocket"
+path = "src/lib.rs"

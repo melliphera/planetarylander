@@ -1,0 +1,17 @@
+[package]
+name = "agc-physics"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nalgebra.workspace = true
+
+[lib]
+name = "agc_physics"
+path = "src/lib.rs"
+
+[[bin]]
+name = "physics-sim"
+path = "src/main.rs"
