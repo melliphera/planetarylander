@@ -23,8 +23,15 @@ let c: u32 = b.saturating_sub(a) // (MR B.3) scheduler time remaining; a saturat
 
 A. UNDEFINED BEHAVIOUR SAFETY/TYPE SAFETY
 1. Use of unsafe code must be avoided unless absolutely necessary. All unsafe code should have thorough documentation and tests proving safety in all cases.
-2. Use of the "as" keyword for type conversion is explicitly prohibited. From/Into traits or self-written conversion methods must be used instead.
-3. All numeric conversions must use try_from() or explicitly handle truncation.
+2. The as operator shall only be used for conversions where the source value's range is provably a subset of the destination type's range, and commented as MR A.2a/b. This must be either:
+    a) Applied on the source and target types; eg i32 as i64 is permitted, i64 -> i32 is not.
+    b) Applied on source value and target type ONLY where local logic can prove the source value fits within the target type. 
+
+A.2b examples include:
+   i(n) -> u(n) if the non-negativity of the number is provable (e.g via .abs() call or squaring).
+   u(n) -> i(n) if the number provably fits within n-1 bits (e.g. via leading_zeros).
+   Downsizing operations if the number is provably small enough to fit in the new type (eg u64 -> u32 after .sqrt())
+   float-> int  if it can be proven that the float already represents an integer or rounding down is explicitly desired.
 
 B. EXPLICIT FAILURE HANDLING
 1. Production code paths shall not use panic!(), unwrap(), expect(), or unreachable!().

@@ -6,9 +6,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+agc-utils = { path = "../utils"}
 arrayvec = "0.7.6"
 fixedstr = "0.5.10"
-nalgebra.workspace = true
 
 [lib]
 name = "agc_physics"

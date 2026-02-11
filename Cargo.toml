@@ -1,5 +1,5 @@
 [workspace]
-members = ["physics", "rocket"]
+members = ["physics", "rocket", "utils"]
 resolver = "2"
 
 [workspace.package]
@@ -10,5 +10,4 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/yourusername/agc-sim"
 
 [workspace.dependencies]
-nalgebra = "0.33"
 rand = "0.8"

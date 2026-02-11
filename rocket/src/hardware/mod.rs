@@ -3,4 +3,5 @@
 
 pub mod controllers;
 pub mod flight_controller;
+pub mod rocket;
 pub mod sensors;

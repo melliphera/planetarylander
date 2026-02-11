@@ -7,6 +7,9 @@ license.workspace = true
 
 [dependencies]
 agc-physics = { path = "../physics" } 
+agc-utils = { path = "../utils"}
+rand.workspace = true
+tokio = { version = "1.49.0", default-features = false, features = ["sync"] }
 
 [dev-dependencies]
 criterion = "0.5"  # For benchmarks
