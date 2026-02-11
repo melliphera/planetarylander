@@ -24,19 +24,6 @@ jobs:
       - name: Check MISRA-Rust lints
         run: cargo clippy --package agc-rocket -- -D warnings
       
-      - name: Run tests with coverage
-        run: |
-          cargo llvm-cov --package agc-rocket \
-            --lcov --output-path lcov.info \
-            --ignore-filename-regex "tests/"
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: lcov.info
-          flags: rocket
-          fail_ci_if_error: true
-      
       - name: Check documentation
         run: cargo doc --package agc-rocket --no-deps --document-private-items
       

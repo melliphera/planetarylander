@@ -19,7 +19,7 @@ enum _SensorState {
 }
 
 struct _SensorReading<T> {
-    /// Represents a single reading from a sensor. Contains the reading data (<T>) and the time it was harvested.
+    /// Represents a single reading from a sensor. Contains the reading data (type: T) and the time it was harvested.
     data: T,
     time: Instant,
 }
