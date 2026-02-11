@@ -11,6 +11,7 @@ const STEPS: usize = (SIM_TIME / TIME_STEP) as usize; // (MR A.2b) Both of the a
 #[derive(Debug)]
 pub enum SimulationError {
     BadTimeStep,
+    BadPrintIndex,
 }
 
 impl From<FloatConversionError> for SimulationError {
@@ -40,7 +41,13 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
             // print data for current step.
             match print_type {
                 PrintType::GraphSingle(p_index) => {
-                    let pb = &bodies[p_index];
+                    let pb = match bodies.get(p_index) {
+                        Some(ind) => ind,
+                        None => {
+                            println!("Trying to print data on an invalid body!");
+                            return Err(SimulationError::BadPrintIndex);
+                        }
+                    };
                     println!(
                         "{}, {}, {}, {}",
                         pb.name[..3].to_uppercase(),
@@ -66,10 +73,17 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
         // ALL BELOW CALCULATIONS ARE FOR THE NEXT STEP
 
         // calculate adjustments in velocity from n-body gravity
+        #[allow(clippy::indexing_slicing)]
+        // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
         for i in 0..N_BODIES {
             // create iterator that reads all other planets.
             let (left, right) = bodies.split_at_mut(i);
-            let (current, rest) = right.split_first_mut().unwrap();
+            let (current, rest) = match right.split_first_mut() {
+                Some(iter) => iter,
+                None => unreachable!(
+                    "None happens on empty list, bodies is guaranteed to be populated."
+                ),
+            };
             let others_iterator = left.iter().chain(rest.iter());
 
             // Calculate acceleration and gravitational potential from all other bodies
@@ -96,6 +110,7 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
             // this is also why we don't mind that the output is scaled by a planet's gravity rather than its mass.
             //                       GPE/kg             kinetic/kg
             let energy_per_kg = (gpe_accumulator + vel * vel / SolarFp::from_int(2)).to_f64();
+
             energies[i] = energy_per_kg * current.gravity.to_f64();
 
             // store acceleration for future calculations
@@ -103,6 +118,8 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
         }
 
         // apply adjustments in velocity/displacement with verlet method.
+        #[allow(clippy::indexing_slicing)]
+        // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
         for i in 0..N_BODIES {
             let current = &mut bodies[i];
             let accel_first = accelerations[i];
@@ -129,7 +146,12 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
             // recalculate acceleration - as above
             // create iterator that reads all other planets.
             let (left, right) = bodies.split_at_mut(i);
-            let (current, rest) = right.split_first_mut().unwrap();
+            let (current, rest) = match right.split_first_mut() {
+                Some(iter) => iter,
+                None => unreachable!(
+                    "None happens on empty list, bodies is guaranteed to be populated."
+                ),
+            };
             let others_iterator = left.iter().chain(rest.iter());
             let mut accel_second = StepVec3D::new();
 

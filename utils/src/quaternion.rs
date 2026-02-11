@@ -83,6 +83,7 @@ impl Quaternion {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod quaternion_tests {
     use crate::{vec3d::Vec3D, FloatConversionError};
 

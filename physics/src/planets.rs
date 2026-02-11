@@ -39,18 +39,12 @@ impl Body {
 
     pub fn fill_influencers(&mut self, body_list: &[Body; 10]) {
         //! each body is influenced by their parent, siblings and children
-        let self_id = body_list
-            .iter()
-            .enumerate()
-            .find(|(_i, obj)| obj.name == self.name)
-            .unwrap()
-            .0;
 
         for (i, body) in body_list.iter().enumerate() {
             // each body is influenced by their parent, sibling and children:
             if Some(i) == self.parent_id            // parent,
                 || body.parent_id == self.parent_id // siblings
-                || body.parent_id == Some(self_id)
+                || body.parent_id == Some(self.id)
             // children
             {
                 self.orbit_influencers.push(i)

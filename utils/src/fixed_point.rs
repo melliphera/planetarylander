@@ -281,6 +281,7 @@ impl<const N: u8> std::fmt::Debug for FixedPoint<N> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)] // this is test code.
 mod tests {
     use super::FixedPoint;
     type TestFp = FixedPoint<56>; // slightly larger integer range to keep testing easy.
