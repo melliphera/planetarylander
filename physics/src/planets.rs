@@ -2,11 +2,24 @@ use agc_utils::{SolarFp, SolarVec3D, StepVec3D};
 use arrayvec::ArrayVec;
 use fixedstr::str16;
 
-#[derive(Debug)]
+/// stored gravity as a fixed point and a bit scalar. For the Sun, the scalar is 20, for gas giants its 10. For all else it is 0. 
+#[derive(Debug, Clone, Copy)]
+pub struct Gravity {
+    pub stored_solar: SolarFp, 
+    pub scale: u8 
+}
+
+impl Gravity {
+    pub fn to_f64(self) -> f64 {
+        //! produces the float represented by this value; including correctly applying the scale.
+        self.stored_solar.to_f64() * (2.0f64).powi(self.scale as i32)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Body {
     pub name: str16,
-    pub gravity: SolarFp, // G*m_1; divide by d^2 for acceleration of external body. Bitshifted by grav_scale
-    pub grav_scale: u8, // value to shift gravity by to get true GM. 20 for sun, 10 for gas giants.
+    pub gravity: Gravity, // G*m_1; divide by d^2 for acceleration of external body. Bitshifted by grav_scale
     pub position: SolarVec3D,
     pub velocity: StepVec3D,
     pub parent_id: Option<usize>,
@@ -27,8 +40,10 @@ impl Body {
         // valid function for any Body with a parent - all but Sol
         Body {
             name: str16::const_make(name),
-            gravity: SolarFp::from_f64_trusted(gravity),
-            grav_scale: scale,
+            gravity: Gravity {
+                stored_solar: SolarFp::from_f64_trusted(gravity),
+                scale
+            },
             position,
             velocity,
             parent_id: Some(parent_id),
@@ -59,8 +74,10 @@ pub const BODIES: [Body; N_BODIES] = [
     // Epoch used for this and all other initial data is Jan-1-2000 00:00.
     Body {
         name: str16::const_make("Sol"),
-        gravity: SolarFp::from_f64_trusted(1.26558e14),
-        grav_scale: 20,
+        gravity: Gravity {
+            stored_solar: SolarFp::from_f64_trusted(1.26558e14),
+            scale: 20,
+        },
         position: SolarVec3D::from_floats_trusted(0.0, 0.0, 0.0),
         velocity: StepVec3D::from_floats_trusted(0.0, 0.0, 0.0),
         parent_id: None,

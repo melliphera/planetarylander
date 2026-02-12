@@ -11,3 +11,8 @@ repository = "https://github.com/yourusername/agc-sim"
 
 [workspace.dependencies]
 rand = "0.8"
+
+[profile.profiling]
+inherits = "release"
+debug = true
+opt-level = 3

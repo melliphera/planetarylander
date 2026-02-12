@@ -5,5 +5,9 @@ mod hardware;
 mod logic;
 
 fn main() -> Result<(), SimulationError> {
-    agc_physics::simulate(agc_utils::PrintType::GraphSingle(3), 2000)
+    let mut system = agc_physics::System::create();
+    let before = std::time::Instant::now();
+    system.simulate(agc_utils::PrintType::GraphSingle(3), 2000)?;
+    println!("Time taken: {:.2}s", before.elapsed().as_secs_f32());
+    Ok(())
 }

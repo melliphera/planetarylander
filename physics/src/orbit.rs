@@ -1,11 +1,11 @@
 //! This file is responsible for the time-step simulation to produce orbital motion.
-use std::f64;
+use core::f64;
 
 use crate::planets::{Body, BODIES, N_BODIES};
 use agc_utils::{FloatConversionError, PrintType, SolarFp, StepFp, StepVec3D};
 
-const TIME_STEP: f64 = 432.0; // 200 steps per day
-const SIM_TIME: f64 = 86400.0 * 365.25 * 2.0; // 2 earth years
+const TIME_STEP: f64 = 43.20; // 200 steps per day
+const SIM_TIME: f64 = 86400.0 * 365.25 * 2.0; // 2 earth years; duration of full simulations done by System.simulate()
 const STEPS: usize = (SIM_TIME / TIME_STEP) as usize; // (MR A.2b) Both of the above must be positive. Practical use of this code explicitly requires an upper bound of this value well below the usize limit.
 
 #[derive(Debug)]
@@ -20,44 +20,54 @@ impl From<FloatConversionError> for SimulationError {
     }
 }
 
-pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), SimulationError> {
-    let mut bodies = BODIES; // copy for mutability
-    let bodies_immutable = BODIES; // copy for clippy linting.
+/// stores the live state of all the bodies, and the means to simulate their movement.
+pub struct System {
+    pub bodies: [Body; N_BODIES],
+    time_passed: f64,
+    pub log_verlet: bool
+}
 
-    for body in bodies.iter_mut() {
-        body.fill_influencers(&bodies_immutable);
+impl System {
+    pub fn create() -> Self {
+        //! creates a new instance of the Solar system, loading in all bodies.
+        let mut out = Self {
+            bodies: BODIES,
+            time_passed: 0.0,
+            log_verlet: false
+        };
+
+        let bodies_immutable = BODIES; // copy for clippy linting.
+
+        for body in out.bodies.iter_mut() {
+            body.fill_influencers(&bodies_immutable);
+        }
+
+        out
     }
 
-    // create mutable registers for tracking and editing data.
-    let mut accelerations: [StepVec3D; N_BODIES] = core::array::from_fn(|_| StepVec3D::new()); // used to produce velocity changes
-    let mut energies: [f64; N_BODIES] = [0.0; N_BODIES]; // used to check conservation.
-    let mut last_total_energy: f64 = 0.0; // to check conservation/drift.
+    pub fn with_verlet_log(mut self) -> Self {
+        self.log_verlet = true;
+        self
+    }
 
-    let time_step_fp = SolarFp::from_f64(TIME_STEP)?; // used for velocities/positions, so SolarFp
-    let half_time_step_fp = StepFp::from_f64(TIME_STEP / 2.0)?; // used for accelerations/velocities, so StepFp
+    pub fn simulate(&mut self, print_type: PrintType, print_interval: usize) -> Result<(), SimulationError> {
+        let mut energy: f64;
+        let mut prev_energy = 0f64;
+        let mut max_energy = -std::f64::MAX; // value selected to ensure first actual value overwrites.
+        let mut min_energy = std::f64::MAX;  // value selected to ensure first actual value overwrites.
 
-    for step in 0..STEPS {
-        if step % print_interval == 0 {
-            // print data for current step.
-            match print_type {
-                PrintType::GraphSingle(p_index) => {
-                    let pb = match bodies.get(p_index) {
-                        Some(ind) => ind,
-                        None => {
-                            println!("Trying to print data on an invalid body!");
-                            return Err(SimulationError::BadPrintIndex);
-                        }
-                    };
-                    println!(
-                        "{}, {}, {}, {}",
-                        pb.name[..3].to_uppercase(),
-                        pb.position.0,
-                        pb.position.1,
-                        pb.position.2
-                    )
-                }
-                PrintType::GraphAll => {
-                    for pb in bodies.iter() {
+        for step in 0..STEPS {
+            if step % print_interval == 0 {
+                // print data for current step.
+                match print_type {
+                    PrintType::GraphSingle(p_index) => {
+                        let pb = match self.bodies.get(p_index) {
+                            Some(ind) => ind,
+                            None => {
+                                println!("Trying to print data on an invalid body!");
+                                return Err(SimulationError::BadPrintIndex);
+                            }
+                        };
                         println!(
                             "{}, {}, {}, {}",
                             pb.name[..3].to_uppercase(),
@@ -66,18 +76,77 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
                             pb.position.2
                         )
                     }
+                    PrintType::GraphAll => {
+                        for pb in self.bodies.iter() {
+                            println!(
+                                "{}, {}, {}, {}",
+                                pb.name[..3].to_uppercase(),
+                                pb.position.0,
+                                pb.position.1,
+                                pb.position.2
+                            )
+                        }
+                    }
                 }
             }
+
+            energy = self.step_time_forwards(TIME_STEP)?; // does the logical part, moving and accelerating bodies.
+
+            if step > 0 && step % print_interval == 0 {
+                println!("System energy: {:.6e}\tchange: {:.6e} ({:+.2}%)",
+                energy,
+                energy - prev_energy,
+                (energy / prev_energy - 1.0) * 100.0)
+            }
+            // energy logging/maintenance
+            prev_energy = energy;
+            max_energy = max_energy.max(energy);
+            min_energy = min_energy.min(energy)
+        }
+        println!("\nmin energy: {:.4e}\nmax energy: {:.4e}\ndeviation: {}%", min_energy, max_energy, (max_energy/min_energy-1.0)*100.0);
+        Ok(())
+    }
+
+    pub fn advance_time_multistep(&mut self, time: SolarFp, max_step_override: Option<SolarFp>) -> Result<(), SimulationError> {
+        //! this function steps from start time to end time in a sensible number of steps.
+        //! does TIME_STEP sized steps until one would too large, then one step for the remainder.
+        //! takes SolarFp as it will be called by the Rocket's event scheduler.
+        //! can take an optional 2nd value as override, for when precision is needed but decisions are far away.
+        let used_step = match max_step_override {
+            Some(val) => val.to_f64(),
+            None => TIME_STEP
+        };
+        let t = time.to_f64();
+        let full_steps = (t / used_step) as usize;
+        let last_step_length = t - (full_steps as f64 * used_step);
+
+        for _i in 0..full_steps {
+            self.step_time_forwards(used_step)?;
         }
 
-        // ALL BELOW CALCULATIONS ARE FOR THE NEXT STEP
+        self.step_time_forwards(last_step_length)?;
+
+        Ok(())
+    }
+
+    #[allow(clippy::indexing_slicing)] // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
+    fn step_time_forwards(&mut self, time: f64) -> Result<f64, SimulationError> {
+        //! steps time forwards by the given time in seconds.
+        //! Internal function only - used by simulate() and advance_time_multistep().
+        self.time_passed += time;
+        let time_step_fp = SolarFp::from_f64(time)?;     // used for velocities/positions, so SolarFp
+        let half_time_step_fp = StepFp::from_f64(time/2.0)?; // used for accelerations/velocities, so StepFp
+
+        // create mutable registers for tracking and editing data.
+        let mut accelerations: [StepVec3D; N_BODIES] = core::array::from_fn(|_| StepVec3D::new()); // used to produce velocity changes
+        let mut temp_velocities: [StepVec3D; N_BODIES] = core::array::from_fn(|_| StepVec3D::new());
+
+        let mut energies: [f64; N_BODIES] = [0.0; N_BODIES]; // used to check conservation.
 
         // calculate adjustments in velocity from n-body gravity
-        #[allow(clippy::indexing_slicing)]
-        // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
         for i in 0..N_BODIES {
             // create iterator that reads all other planets.
-            let (left, right) = bodies.split_at_mut(i);
+            let (left, right) = self.bodies.split_at_mut(i);
             let (current, rest) = match right.split_first_mut() {
                 Some(iter) => iter,
                 None => unreachable!(
@@ -99,7 +168,7 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
 
                 // only calculate potential against earlier planets; avoids double-counting
                 if j < i {
-                    gpe_accumulator -= other.gravity / distance;
+                    gpe_accumulator -=  (other.gravity.stored_solar / distance).lshift(other.gravity.scale);
                 }
             }
             // calculate current energy
@@ -117,35 +186,47 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
             accelerations[i] = accel;
         }
 
+        let mut vbuffer = String::new();
+
         // apply adjustments in velocity/displacement with verlet method.
         #[allow(clippy::indexing_slicing)]
         // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
         for i in 0..N_BODIES {
-            let current = &mut bodies[i];
+            let current = &mut self.bodies[i];
             let accel_first = accelerations[i];
 
             // verlet method
-            println!("Applying step to: {}", current.name.to_ascii_upper());
+            if self.log_verlet {
+                vbuffer += &format!("Applying step to: {}\n", current.name.to_ascii_upper());
+            }
 
             // apply half of acceleration-time to velocity
             let velocity_from_accel = accel_first.scale(half_time_step_fp);
-            println!(
-                "v_0:\t{:?};\nadding\t{:?}",
-                current.velocity, velocity_from_accel
-            );
-            let temp_velocity = current.velocity.add(&velocity_from_accel);
+            
+            if self.log_verlet {
+                vbuffer += &format!(
+                    "v_0:\t{:?};\nadding\t{:?}\n",
+                    current.velocity, velocity_from_accel
+                );
+            }
+
+            temp_velocities[i] = current.velocity.add(&velocity_from_accel);
 
             // apply effects of velocity on position
-            let position_from_velocity = temp_velocity.as_solar().scale(time_step_fp);
-            println!(
-                "pos:\t{:?};\nadding\t{:?}",
-                current.position, position_from_velocity
-            );
+            let position_from_velocity = temp_velocities[i].as_solar().scale(time_step_fp);
+            
+            if self.log_verlet {
+                vbuffer += &format!(
+                    "pos:\t{:?};\nadding\t{:?}\n",
+                    current.position, position_from_velocity
+                );
+            }
             current.position = current.position.add(&position_from_velocity);
-
-            // recalculate acceleration - as above
-            // create iterator that reads all other planets.
-            let (left, right) = bodies.split_at_mut(i);
+        }
+        // new loop - recalculate acceleration - as above
+        // create iterator that reads all other planets.
+        for i in 0..N_BODIES {
+            let (left, right) = self.bodies.split_at_mut(i);
             let (current, rest) = match right.split_first_mut() {
                 Some(iter) => iter,
                 None => unreachable!(
@@ -161,36 +242,31 @@ pub fn simulate(print_type: PrintType, print_interval: usize) -> Result<(), Simu
 
             // add other half of acceleration-time to velocity with new accel.
             let second_velocity_from_accel = accel_second.scale(half_time_step_fp);
-            println!(
-                "v_0.5:\t{:?}\nadding\t{:?}\n",
-                temp_velocity, second_velocity_from_accel
-            );
-            current.velocity = temp_velocity.add(&second_velocity_from_accel);
+            if self.log_verlet {
+                vbuffer += &format!(
+                    "v_0.5:\t{:?}\nadding\t{:?}\n\n",
+                    temp_velocities[i], second_velocity_from_accel
+                );
+            }
+            current.velocity = temp_velocities[i].add(&second_velocity_from_accel);
 
             // show result of computations
-            println!(
-                "final_pos: {:?}\nfinal_vel: {:?}\n",
-                current.position, current.velocity
-            );
+            if self.log_verlet {
+                vbuffer += &format!(
+                    "final_pos: {:?}\nfinal_vel: {:?}\n\n",
+                    current.position, current.velocity
+                );
+            }
+        }
+
+        if self.log_verlet {
+            println!("{}", vbuffer)
         }
 
         // handle energy calculations.
         let new_sum: f64 = energies.iter().sum();
-
-        if step > 0 && step % print_interval == 0 {
-            println!(
-                "System energy: {:.6e}\tchange: {:.6e} ({:+.2}%)",
-                new_sum,
-                new_sum - last_total_energy,
-                (new_sum / last_total_energy - 1.0) * 100.0
-            )
-        }
-
-        last_total_energy = new_sum;
-
-        //
+        Ok(new_sum)
     }
-    Ok(())
 }
 
 fn calculate_accel(pulled: &Body, pulling_body: &Body) -> StepVec3D {
@@ -205,12 +281,12 @@ fn calculate_accel(pulled: &Body, pulling_body: &Body) -> StepVec3D {
         direction_vector
     );
 
-    let mut grav = pulling_body.gravity; // starts as GM, ends as GM/d^2
+    let mut grav = pulling_body.gravity.stored_solar; // starts as GM, ends as GM/d^2
     let late_scaled: bool = pulling_body.id == 0 || pulled.parent_id == Some(pulling_body.id);
 
     if !late_scaled {
         // scale gravity immediately if its not going to be large (sun with any or gas giant with child)
-        grav = grav.lshift(pulling_body.grav_scale);
+        grav = grav.lshift(pulling_body.gravity.scale);
     };
 
     #[cfg(test)]
@@ -233,7 +309,7 @@ fn calculate_accel(pulled: &Body, pulling_body: &Body) -> StepVec3D {
 
     if late_scaled {
         // scale gravity now if it hasnt been done already.
-        grav = grav.lshift(pulling_body.grav_scale);
+        grav = grav.lshift(pulling_body.gravity.scale);
     };
 
     #[cfg(test)]
