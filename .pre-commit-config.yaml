@@ -1,0 +1,25 @@
+repos:
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt
+        language: system
+        types: [rust]
+        pass_filenames: false
+        
+      - id: cargo-clippy
+        name: cargo clippy
+        entry: cargo clippy
+        language: system
+        types: [rust]
+        pass_filenames: false
+        args: ['--', '-D', 'warnings', '-A', 'dead_code'] # fail on any clippy warning apart from dead code.
+        
+      - id: cargo-test
+        name: cargo test
+        entry: cargo test
+        language: system
+        types: [rust]
+        pass_filenames: false
+        stages: [pre-push]  # Only on push, not every commit
