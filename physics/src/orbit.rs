@@ -24,7 +24,7 @@ impl From<FloatConversionError> for SimulationError {
 pub struct System {
     pub bodies: [Body; N_BODIES],
     time_passed: f64,
-    pub log_verlet: bool
+    pub log_verlet: bool,
 }
 
 impl System {
@@ -33,7 +33,7 @@ impl System {
         let mut out = Self {
             bodies: BODIES,
             time_passed: 0.0,
-            log_verlet: false
+            log_verlet: false,
         };
 
         let bodies_immutable = BODIES; // copy for clippy linting.
@@ -50,11 +50,15 @@ impl System {
         self
     }
 
-    pub fn simulate(&mut self, print_type: PrintType, print_interval: usize) -> Result<(), SimulationError> {
+    pub fn simulate(
+        &mut self,
+        print_type: PrintType,
+        print_interval: usize,
+    ) -> Result<(), SimulationError> {
         let mut energy: f64;
         let mut prev_energy = 0f64;
-        let mut max_energy = -std::f64::MAX; // value selected to ensure first actual value overwrites.
-        let mut min_energy = std::f64::MAX;  // value selected to ensure first actual value overwrites.
+        let mut max_energy = -f64::MAX; // value selected to ensure first actual value overwrites.
+        let mut min_energy = f64::MAX; // value selected to ensure first actual value overwrites.
 
         for step in 0..STEPS {
             if step % print_interval == 0 {
@@ -93,28 +97,39 @@ impl System {
             energy = self.step_time_forwards(TIME_STEP)?; // does the logical part, moving and accelerating bodies.
 
             if step > 0 && step % print_interval == 0 {
-                println!("System energy: {:.6e}\tchange: {:.6e} ({:+.2}%)",
-                energy,
-                energy - prev_energy,
-                (energy / prev_energy - 1.0) * 100.0)
+                println!(
+                    "System energy: {:.6e}\tchange: {:.6e} ({:+.2}%)",
+                    energy,
+                    energy - prev_energy,
+                    (energy / prev_energy - 1.0) * 100.0
+                )
             }
             // energy logging/maintenance
             prev_energy = energy;
             max_energy = max_energy.max(energy);
             min_energy = min_energy.min(energy)
         }
-        println!("\nmin energy: {:.4e}\nmax energy: {:.4e}\ndeviation: {}%", min_energy, max_energy, (max_energy/min_energy-1.0)*100.0);
+        println!(
+            "\nmin energy: {:.4e}\nmax energy: {:.4e}\ndeviation: {}%",
+            min_energy,
+            max_energy,
+            (max_energy / min_energy - 1.0) * 100.0
+        );
         Ok(())
     }
 
-    pub fn advance_time_multistep(&mut self, time: SolarFp, max_step_override: Option<SolarFp>) -> Result<(), SimulationError> {
+    pub fn advance_time_multistep(
+        &mut self,
+        time: SolarFp,
+        max_step_override: Option<SolarFp>,
+    ) -> Result<(), SimulationError> {
         //! this function steps from start time to end time in a sensible number of steps.
         //! does TIME_STEP sized steps until one would too large, then one step for the remainder.
         //! takes SolarFp as it will be called by the Rocket's event scheduler.
         //! can take an optional 2nd value as override, for when precision is needed but decisions are far away.
         let used_step = match max_step_override {
             Some(val) => val.to_f64(),
-            None => TIME_STEP
+            None => TIME_STEP,
         };
         let t = time.to_f64();
         let full_steps = (t / used_step) as usize;
@@ -134,8 +149,8 @@ impl System {
         //! steps time forwards by the given time in seconds.
         //! Internal function only - used by simulate() and advance_time_multistep().
         self.time_passed += time;
-        let time_step_fp = SolarFp::from_f64(time)?;     // used for velocities/positions, so SolarFp
-        let half_time_step_fp = StepFp::from_f64(time/2.0)?; // used for accelerations/velocities, so StepFp
+        let time_step_fp = SolarFp::from_f64(time)?; // used for velocities/positions, so SolarFp
+        let half_time_step_fp = StepFp::from_f64(time / 2.0)?; // used for accelerations/velocities, so StepFp
 
         // create mutable registers for tracking and editing data.
         let mut accelerations: [StepVec3D; N_BODIES] = core::array::from_fn(|_| StepVec3D::new()); // used to produce velocity changes
@@ -168,7 +183,8 @@ impl System {
 
                 // only calculate potential against earlier planets; avoids double-counting
                 if j < i {
-                    gpe_accumulator -=  (other.gravity.stored_solar / distance).lshift(other.gravity.scale);
+                    gpe_accumulator -=
+                        (other.gravity.stored_solar / distance).lshift(other.gravity.scale);
                 }
             }
             // calculate current energy
@@ -202,7 +218,7 @@ impl System {
 
             // apply half of acceleration-time to velocity
             let velocity_from_accel = accel_first.scale(half_time_step_fp);
-            
+
             if self.log_verlet {
                 vbuffer += &format!(
                     "v_0:\t{:?};\nadding\t{:?}\n",
@@ -214,7 +230,7 @@ impl System {
 
             // apply effects of velocity on position
             let position_from_velocity = temp_velocities[i].as_solar().scale(time_step_fp);
-            
+
             if self.log_verlet {
                 vbuffer += &format!(
                     "pos:\t{:?};\nadding\t{:?}\n",
@@ -225,7 +241,7 @@ impl System {
         }
         // new loop - recalculate acceleration - as above
         // create iterator that reads all other planets.
-        for i in 0..N_BODIES {
+        for (i, t_vel) in temp_velocities.iter().enumerate() {
             let (left, right) = self.bodies.split_at_mut(i);
             let (current, rest) = match right.split_first_mut() {
                 Some(iter) => iter,
@@ -245,10 +261,10 @@ impl System {
             if self.log_verlet {
                 vbuffer += &format!(
                     "v_0.5:\t{:?}\nadding\t{:?}\n\n",
-                    temp_velocities[i], second_velocity_from_accel
+                    t_vel, second_velocity_from_accel
                 );
             }
-            current.velocity = temp_velocities[i].add(&second_velocity_from_accel);
+            current.velocity = t_vel.add(&second_velocity_from_accel);
 
             // show result of computations
             if self.log_verlet {

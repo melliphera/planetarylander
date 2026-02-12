@@ -2,11 +2,11 @@ use agc_utils::{SolarFp, SolarVec3D, StepVec3D};
 use arrayvec::ArrayVec;
 use fixedstr::str16;
 
-/// stored gravity as a fixed point and a bit scalar. For the Sun, the scalar is 20, for gas giants its 10. For all else it is 0. 
+/// stored gravity as a fixed point and a bit scalar. For the Sun, the scalar is 20, for gas giants its 10. For all else it is 0.
 #[derive(Debug, Clone, Copy)]
 pub struct Gravity {
-    pub stored_solar: SolarFp, 
-    pub scale: u8 
+    pub stored_solar: SolarFp,
+    pub scale: u8,
 }
 
 impl Gravity {
@@ -42,7 +42,7 @@ impl Body {
             name: str16::const_make(name),
             gravity: Gravity {
                 stored_solar: SolarFp::from_f64_trusted(gravity),
-                scale
+                scale,
             },
             position,
             velocity,
