@@ -3,9 +3,11 @@
 //! Instruments must never store values acquired directly from Rocket without processing them to add their own inaccuracy first (this would be cheating!)
 
 use agc_utils::{Quaternion, SolarVec3D, StepVec3D};
+use crate::hardware::sensors::Sensor;
 
 pub struct _Rocket {
     position: SolarVec3D,
     velocity: StepVec3D,
     orientation: Quaternion,
+    instruments: [Sensor; 4]
 }

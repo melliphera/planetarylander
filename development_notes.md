@@ -88,3 +88,29 @@ This was eventually solved with body factors. GM values continue to be stored as
 If the pulling body is the Sun, GM is divided by 1048576; a number chosen for its proximity to 1 million, while being a power of 2 so division (and the later multiplication) are fast processes.
 
 If the pulling body is a gas giant (Jupiter, Saturn, Uranus, Neptune) and is the pulled body's parent (ie pulled body is a moon or rocket within the gas giant's Hill sphere), GM is divided by 1024, similar logic as above but close to 1000.
+
+## FlightController <-> Sensor Communication
+As discussed in rocket_constraints.txt, each sensor runs on its own independently managed thread, and therefore multithreading techniques must be integrated to enable these to run and communicate with the FlightController. The first proposition for communication architecture and protocol is as follows:
+
+The Rocket struct contains both the FlightController struct and an array of Sensor enums. The Sensor enum is used as a fixed-size wrapper to enable a form of dynamic dispatch to different sensors; the enum itself is impl'd and methods which send and receive information are tailored to each sensor type as appropriate. The enum itself wraps senders and receivers, therefore serving as an interface to the sensor threads rather than as the sensors directly. All messages passed between the FlightController are handled via these enums.
+
+The communication protocol FC-S.1 is as follows:
+
+1F. FC approximates when it next needs to make a decision, calculates a jump time based on this
+
+2F. FC (via sender) sends jump time information to all sensors BEFORE the step is simulated.
+2S. Sensor receives this information, and uses it to generate a list of poll requests; times at which the sensor is supposed to read data from the simulation and process a result.
+
+3S. Sensors send poll request information back to sender (including natural variance etc).
+3F. FC iterates over all sensor requests, collecting them.
+
+4F. FC builds a sorted queue of all the polling times
+
+5F. FC advances time through jumps defined via the queue, sending out planetary/rocket data to each sensor as appropriate
+5S. Each sensor returns its own reading at the polled time. These sends are non-blocking, unbuffered single output (so only most recent can be read).
+
+6F. FC collects data as it comes in, validates it, and stores in a small (4-8 reading?) FIFO ring buffer if it looks valid.
+
+7S. Once the sensor's locally stored poll queue is depleted, its thread runs back to step 2S, a blocking receiver.
+
+8F. FC acts on the collected data, and loops back to step 1F.

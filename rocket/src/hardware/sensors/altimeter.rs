@@ -10,7 +10,7 @@ use agc_utils::{SolarFp, SolarVec3D, UnitFp};
 //use agc_utils::Vec3D;
 
 use super::{
-    _SensorReading,
+    SensorReading,
     _SensorState::{self, *},
 };
 
@@ -19,12 +19,12 @@ const _ALTIMETER_DRIFT_BOUNDS: UnitFp = UnitFp::from_f64_trusted(0.000375); // m
 pub struct _AltimeterData {
     state: _SensorState,
     variance: UnitFp,                      // Operational deviation from true values.
-    last_reading: _SensorReading<SolarFp>, // last reading collected by the device.
+    last_reading: SensorReading<SolarFp>, // last reading collected by the device.
     drift: SolarFp,                        // constantly growing deviation from real values
     drift_rate: SolarFp, // rate at which drift increases (per second). Randomised between +/-ALTIMETER_DRIFT_BOUNDS on startup/reboot
     polling_delay: f64,
     max_range: SolarFp,
-    send_channel: watch::Sender<_SensorReading<f64>>, //
+    send_channel: watch::Sender<SensorReading<SolarFp>>, //
 }
 
 impl _AltimeterData {
@@ -35,7 +35,7 @@ impl _AltimeterData {
             Operational => {
                 let true_distance = location.vector_to(&target.position).magnitude();
                 if true_distance < self.max_range {
-                    self.last_reading = _SensorReading {
+                    self.last_reading = SensorReading {
 
                         #[allow(clippy::arithmetic_side_effects)] // it's complaining about the addition. We know for a fact that variance is in bounds.
                         data: (UnitFp::from_int(1) + self.variance).scale_by_other(true_distance)
@@ -47,7 +47,7 @@ impl _AltimeterData {
             Variant => {
                 let true_distance = location.vector_to(&target.position).magnitude();
                 if true_distance < self.max_range {
-                    self.last_reading = _SensorReading {
+                    self.last_reading = SensorReading {
 
                         #[allow(clippy::arithmetic_side_effects)] // it's complaining about the addition. We know for a fact that variance is in bounds.
                         data: (UnitFp::from_int(1) + self.variance * UnitFp::from_int(5))
@@ -57,7 +57,7 @@ impl _AltimeterData {
                 }
             }
             Garbage => {
-                self.last_reading = _SensorReading {
+                self.last_reading = SensorReading {
                     data: SolarFp::with_internal(rand::thread_rng().gen()), // garbage data
                     time: Instant::now(),
                 }
