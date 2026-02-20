@@ -31,7 +31,7 @@ impl System {
     }
 
     /// enable logging of the calculation steps on the struct. Uses the builder pattern e.g. System::create().with_verlet_log().simulate()
-    pub fn with_verlet_log(mut self) -> Self {
+    pub const fn with_verlet_log(mut self) -> Self {
         self.log_verlet = true;
         self
     }

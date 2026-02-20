@@ -41,12 +41,12 @@ pub enum FloatConversionError {
 
 impl<const N: u8> FixedPoint<N> {
     /// creates a FixedPoint which REPRESENTS the selected int. To create one with a specified stored int, use with_internal().
-    pub fn from_int(int: i64) -> Self {
+    pub const fn from_int(int: i64) -> Self {
         Self(int << N)
     }
 
     /// Instantiates a FixedPoint with the specified internal value.
-    pub fn with_internal(int: i64) -> Self {
+    pub const fn with_internal(int: i64) -> Self {
         Self(int)
     }
 
@@ -107,7 +107,7 @@ impl<const N: u8> FixedPoint<N> {
     }
 
     /// produces the f64 representation of the represented number.
-    pub fn to_f64(&self) -> f64 {
+    pub const fn to_f64(&self) -> f64 {
         if self.0 == 0 {
             return 0.0f64;
         }
@@ -140,21 +140,21 @@ impl<const N: u8> FixedPoint<N> {
     }
 
     /// produces a strictly non-negative version of the number by calling abs() on its internal value.
-    pub fn abs(&self) -> Self {
+    pub const fn abs(&self) -> Self {
         Self(self.0.abs())
     }
 
-    pub fn lshift(&self, amount: u8) -> Self {
+    pub const fn lshift(&self, amount: u8) -> Self {
         //! shifts the inner value left by "amount" bits.
         Self(self.0 << amount)
     }
 
-    pub fn rshift(&self, amount: u8) -> Self {
+    pub const fn rshift(&self, amount: u8) -> Self {
         //! shifts the inner value right by "amount" bits.
         Self(self.0 >> amount)
     }
 
-    pub fn as_step_fp(self) -> StepFp {
+    pub const fn as_step_fp(self) -> StepFp {
         //! converts self to a StepFp, consuming it.
         if N < STEP_FIXED_POINT_DECIMAL_BITS {
             // if N is less, need to be more precise; inner value grows
@@ -164,7 +164,7 @@ impl<const N: u8> FixedPoint<N> {
         }
     }
 
-    pub fn as_solar_fp(self) -> SolarFp {
+    pub const fn as_solar_fp(self) -> SolarFp {
         //! Convert fixed point of any size to SolarFp, preserving the value as closely as possible.
         if N < SOLAR_FIXED_POINT_DECIMAL_BITS {
             // if N is less, need to be more precise; inner value grows

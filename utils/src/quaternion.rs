@@ -59,7 +59,7 @@ impl Quaternion {
         Self(self.0, -self.1, -self.2, -self.3)
     }
 
-    fn _from_vector(vector: Vec3D<UNIT_FIXED_POINT_DECIMAL_BITS>) -> Self {
+    const fn _from_vector(vector: Vec3D<UNIT_FIXED_POINT_DECIMAL_BITS>) -> Self {
         //! convert vector to quaternion; used in the conversion of quaternion to vec.
         Quaternion(UnitFp::from_int(0), vector.0, vector.1, vector.2)
     }

@@ -24,7 +24,7 @@ impl<const N: u8> Default for Vec3D<N> {
 }
 
 impl<const N: u8> Vec3D<N> {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(
             FixedPoint::<N>::from_int(0),
             FixedPoint::<N>::from_int(0),
@@ -107,7 +107,7 @@ impl<const N: u8> Vec3D<N> {
         shrunk.scale_down(divisor)
     }
 
-    pub fn as_solar(&self) -> SolarVec3D {
+    pub const fn as_solar(&self) -> SolarVec3D {
         //! converts a vec of any scale to Solar, preserving the represented value as well as possible.
         Vec3D(
             self.0.as_solar_fp(),
