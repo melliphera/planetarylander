@@ -2,23 +2,7 @@
 use core::f64;
 
 use crate::planets::{Body, BODIES, N_BODIES};
-use agc_utils::{FloatConversionError, PrintType, SolarFp, StepFp, StepVec3D};
-
-const TIME_STEP: f64 = 43.20; // 200 steps per day
-const SIM_TIME: f64 = 86400.0 * 365.25 * 2.0; // 2 earth years; duration of full simulations done by System.simulate()
-const STEPS: usize = (SIM_TIME / TIME_STEP) as usize; // (MR A.2b) Both of the above must be positive. Practical use of this code explicitly requires an upper bound of this value well below the usize limit.
-
-#[derive(Debug)]
-pub enum SimulationError {
-    BadTimeStep,
-    BadPrintIndex,
-}
-
-impl From<FloatConversionError> for SimulationError {
-    fn from(_value: FloatConversionError) -> Self {
-        Self::BadTimeStep
-    }
-}
+use agc_utils::{consts::*, errors::*, message_channels::*, PrintType, SolarFp, StepFp, StepVec3D};
 
 /// stores the live state of all the bodies, and the means to simulate their movement.
 pub struct System {
@@ -120,7 +104,7 @@ impl System {
 
     pub fn advance_time_multistep(
         &mut self,
-        time: SolarFp,
+        time: f64,
         max_step_override: Option<SolarFp>,
     ) -> Result<(), SimulationError> {
         //! this function steps from start time to end time in a sensible number of steps.
@@ -131,7 +115,7 @@ impl System {
             Some(val) => val.to_f64(),
             None => TIME_STEP,
         };
-        let t = time.to_f64();
+        let t = time;
         let full_steps = (t / used_step) as usize;
         let last_step_length = t - (full_steps as f64 * used_step);
 
@@ -282,6 +266,74 @@ impl System {
         // handle energy calculations.
         let new_sum: f64 = energies.iter().sum();
         Ok(new_sum)
+    }
+
+    pub fn spawn_live_thread(
+        fc_listener: FcMessageReceiver,
+        initial_timescale: f64,
+    ) -> Result<(), SimulationError> {
+        //! creates a new thread with a System instance primed for live-simulating inside it at the set tickrate.
+        //! Doesn't actually start until it gets a Go signal with system epoch from the main thread.
+        let mut s = System::create();
+        let _unused_handle =
+            std::thread::spawn(move || s.realtime_mainloop(fc_listener, initial_timescale));
+        Ok(())
+    }
+
+    fn realtime_mainloop(
+        &mut self,
+        listener: FcMessageReceiver,
+        initial_timescale: f64,
+    ) -> Result<(), SimulationError> {
+        let go_call = listener.recv();
+        let epoch = match go_call {
+            Ok(FcMessageOut::GoSynced(t)) => t,
+            Ok(_) | Err(_) => return Err(BroadcastError::WrongInit.into()), // first value received wasn't the right one.
+        };
+        let mut tick_counter: u32 = 0;
+        let mut tick_time = epoch;
+        let mut tick_sim_duration = TICK_DELAY * initial_timescale;
+        loop {
+            // check for signal from FC - it doesn't matter if this is a tick late as it will never be done at critical times.
+            match listener.try_recv() {
+                Ok(FcMessageOut::Kill) => break,
+                Ok(FcMessageOut::NewTimescale(scale, _epoch)) => {
+                    tick_sim_duration = TICK_DELAY * scale.to_f64()
+                }
+                Ok(FcMessageOut::GoSynced(_)) | Ok(FcMessageOut::Restart) => {
+                    return Err(BroadcastError::BadRuntimeSignal.into())
+                }
+                Ok(FcMessageOut::Heartbeat) => {}
+                Err(_) => {} // no message received.
+            };
+
+            // do actual tick logic here
+            self.step_time_forwards(tick_sim_duration)?;
+
+            // send context to Sensors that they can read data.
+            let pb = &self.bodies[3];
+            println!(
+                "{}, {}, {}, {}",
+                pb.name[..3].to_uppercase(),
+                pb.position.0,
+                pb.position.1,
+                pb.position.2
+            );
+
+            // handle clock
+            tick_counter = tick_counter.saturating_add(1);
+
+            let current_tick_elapsed = tick_time.elapsed();
+            tick_time = match epoch.checked_add(TICK_DELAY_AS_DURATION.saturating_mul(tick_counter))
+            {
+                Some(val) => val,
+                None => return Err(BroadcastError::UnlinkedChannel.into()), // bogus error but its okay; tick time failure will always occur on main thread first.
+            };
+
+            let until_next_tick = TICK_DELAY_AS_DURATION.saturating_sub(current_tick_elapsed);
+            std::thread::sleep(until_next_tick);
+        }
+        Ok(())
     }
 }
 

@@ -8,7 +8,7 @@ use crate::vec3d::Vec3D;
 pub struct Quaternion(UnitFp, UnitFp, UnitFp, UnitFp);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-enum _QuaternionError {
+pub enum _QuaternionError {
     NotUnit,
     BadFloat(FloatConversionError),
 }
@@ -33,7 +33,7 @@ impl Quaternion {
         }
     }
 
-    fn _from_floats(w: f64, x: f64, y: f64, z: f64) -> Result<Quaternion, _QuaternionError> {
+    pub fn from_floats(w: f64, x: f64, y: f64, z: f64) -> Result<Quaternion, _QuaternionError> {
         let (wufp, xufp, yufp, zufp) = (
             UnitFp::from_f64(w)?,
             UnitFp::from_f64(x)?,
@@ -92,7 +92,7 @@ mod quaternion_tests {
     #[test]
     fn test_new_valid() {
         // this creation passes validation because its magnitude is 1
-        let ff = Quaternion::_from_floats(0.0, 0.6, 0.8, 0.0);
+        let ff = Quaternion::from_floats(0.0, 0.6, 0.8, 0.0);
         let expected = Ok(Quaternion(
             UnitFp::from_f64_trusted(0.0),
             UnitFp::from_f64_trusted(0.6),
@@ -107,13 +107,13 @@ mod quaternion_tests {
     fn test_new_invalid() {
         // magnitude too far from 1, fail
         assert_eq!(
-            Quaternion::_from_floats(1.0, 1.0, 0.0, 0.0),
+            Quaternion::from_floats(1.0, 1.0, 0.0, 0.0),
             Err(_QuaternionError::NotUnit)
         );
 
         // bad float fed in, float fails bounds check
         assert_eq!(
-            Quaternion::_from_floats(1.0, 3.0, 1299.0, 3.0),
+            Quaternion::from_floats(1.0, 3.0, 1299.0, 3.0),
             Err(_QuaternionError::BadFloat(
                 FloatConversionError::OutOfBounds
             ))
@@ -123,9 +123,9 @@ mod quaternion_tests {
     #[test]
     fn test_mult() {
         // multiply two quaternions together, validate output is correct against external calculation (within ERR_EPSILON on each field).
-        let multed = Quaternion::_from_floats(0.3, 0.6, 0.5, 0.547722558)
+        let multed = Quaternion::from_floats(0.3, 0.6, 0.5, 0.547722558)
             .unwrap()
-            ._mult(&Quaternion::_from_floats(0.8, 0.1, 0.5, 0.316227766).unwrap());
+            ._mult(&Quaternion::from_floats(0.8, 0.1, 0.5, 0.316227766).unwrap());
         let result = Quaternion(
             UnitFp::from_f64_trusted(-0.2432050809041),
             UnitFp::from_f64_trusted(0.394252604),
@@ -138,10 +138,10 @@ mod quaternion_tests {
 
     #[test]
     fn test_conjugate() {
-        let quat_test = Quaternion::_from_floats(0.0, 0.6, 0.8, 0.0).unwrap();
+        let quat_test = Quaternion::from_floats(0.0, 0.6, 0.8, 0.0).unwrap();
         assert_eq!(
             quat_test._conjugated(),
-            Quaternion::_from_floats(0.0, -0.6, -0.8, -0.0).unwrap()
+            Quaternion::from_floats(0.0, -0.6, -0.8, -0.0).unwrap()
         );
     }
 
@@ -150,14 +150,14 @@ mod quaternion_tests {
         let test_vector = Vec3D::from_floats(0.6, 0.8, 0.0).unwrap();
         assert_eq!(
             Quaternion::_from_vector(test_vector),
-            Quaternion::_from_floats(0.0, 0.6, 0.8, 0.0).unwrap()
+            Quaternion::from_floats(0.0, 0.6, 0.8, 0.0).unwrap()
         )
     }
 
     #[test]
     fn test_to_forward_vector() {
         assert_eq!(
-            Quaternion::_from_floats(1.0, 0.0, 0.0, 0.0)
+            Quaternion::from_floats(1.0, 0.0, 0.0, 0.0)
                 .unwrap()
                 ._to_forward_vector(),
             Vec3D::from_floats(1.0, 0.0, 0.0).unwrap()

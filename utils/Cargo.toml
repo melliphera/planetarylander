@@ -7,3 +7,4 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+tokio = { version = "1.49.0", default-features = false, features = ["sync"] }

@@ -1,39 +1,70 @@
 use std::time::Instant;
 
 use agc_utils::{Quaternion, SolarFp, StepVec3D};
-use tokio::sync::watch::Receiver;
+use std::sync::mpsc;
 
 pub mod altimeter;
 pub mod inertial_platform; // gyroscope + accelerometer
 
+use agc_utils::message_channels::*;
+
+use crate::hardware::sensors::altimeter::Altimeter;
+
+pub const NUM_SENSORS: usize = 1; // number of currently implemented sensors. Used in a few array bounds and safety checks (to ensure all sensors are linked).
+
+pub enum Sensor {
+    // this is just used to have named sensors without using strings. generate() is impl'd on this enum for natural semantics.
+    Altimeter,
+    InertialPlatform,
+}
+
 /// enum wrapper to enable iteration and single-array storage of different sensors.
 /// the enum itself contains a sender and a receiver.
 /// creating an instance of the enum involves spawning a thread which the sender independently runs on.
-/// the flight controller sends time information to the thread via a blocking sender.
-/// the sender then simulates time 
-/// 
-pub enum Sensor {
-    Altimeter(Sender<SolarFp>, Receiver<SensorReading<SolarFp>>),
-    InertialPlatform(Sender<SolarFp>, Receiver<SensorReading<(Quaternion, StepVec3D)>>),
+/// the flight controller can send information via the FcMessageOut sender, which can contain one of two things;
+/// 1) an amount of time that the flightcontroller wishes to advance. This results in the sensor simulating that amount of time passing and sending back results.
+/// 2) timescale information; such that the sensor thread's timescale stays synced with the rest of the simulation.
+///
+/// the sender then simulates time
+pub enum SensorHandle {
+    Altimeter(FcMessageSender, DataReceiver<SolarFp>),
+    InertialPlatform(FcMessageSender, DataReceiver<(Quaternion, StepVec3D)>),
 }
 
 impl Sensor {
-    pub fn generate() -> Self {
-        // spawns a new thread which 
+    pub fn generate(&self) -> SensorHandle {
+        //! spawns a new thread which operates the sensor runtime.
+
+        // create broadcast pair; not specific to each sensor.
+        let (broadcast_sender, broadcast_receiver) = mpsc::channel::<FcMessageOut>();
+
+        match self {
+            Sensor::Altimeter => {
+                // create sensor-specific instrumnent result pair.
+                let (data_sender, data_receiver) =
+                    watch_channel::<SensorReading<SolarFp>>(SensorReading {
+                        data: SolarFp::from_int(0),
+                        time: Instant::now(),
+                    });
+
+                // start the thread itself
+                Altimeter::start_thread(data_sender, broadcast_receiver);
+
+                // return the handle
+                SensorHandle::Altimeter(broadcast_sender, data_receiver)
+            }
+            Sensor::InertialPlatform => {
+                unimplemented!()
+            }
+        }
     }
 }
 
-pub enum _SensorState {
+pub enum SensorState {
     /// All sensors are capable of falling into any of these states.
     Operational, // subject to minimal variance, working as expected. Operational variance is defined during instantiation of the hardware.
     Variant,        // subject to 10x variance compared normal, otherwise all working
     Garbage,        // throws out technically parseable data with truly random values.
     Frozen(f64),    // simulates hanging sensor. Carried number is unfreeze time.
     Rebooting(f64), // triggered by FlightController. Reverts to Operational after time.
-}
-
-pub struct SensorReading<T> {
-    /// Represents a single reading from a sensor. Contains the reading data (type: T) and the time it was harvested.
-    data: T,
-    time: Instant,
 }

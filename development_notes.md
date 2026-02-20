@@ -90,6 +90,7 @@ If the pulling body is the Sun, GM is divided by 1048576; a number chosen for it
 If the pulling body is a gas giant (Jupiter, Saturn, Uranus, Neptune) and is the pulled body's parent (ie pulled body is a moon or rocket within the gas giant's Hill sphere), GM is divided by 1024, similar logic as above but close to 1000.
 
 ## FlightController <-> Sensor Communication
+### FC-S.1
 As discussed in rocket_constraints.txt, each sensor runs on its own independently managed thread, and therefore multithreading techniques must be integrated to enable these to run and communicate with the FlightController. The first proposition for communication architecture and protocol is as follows:
 
 The Rocket struct contains both the FlightController struct and an array of Sensor enums. The Sensor enum is used as a fixed-size wrapper to enable a form of dynamic dispatch to different sensors; the enum itself is impl'd and methods which send and receive information are tailored to each sensor type as appropriate. The enum itself wraps senders and receivers, therefore serving as an interface to the sensor threads rather than as the sensors directly. All messages passed between the FlightController are handled via these enums.
@@ -114,3 +115,37 @@ The communication protocol FC-S.1 is as follows:
 7S. Once the sensor's locally stored poll queue is depleted, its thread runs back to step 2S, a blocking receiver.
 
 8F. FC acts on the collected data, and loops back to step 1F.
+
+#### Issues
+Early in the implementation stage of FC-S.1, a couple of pain points came up. 
+
+1) The protocol delegates the passage of time entirely to the FlightController using step-based timing methods. While this is elegant in a sense, it would be much preferable for time to be linked firmly to the passage of real time. This protocol has no way of nicely handling real time.
+2) The protocol depends on the FlightController sending perfectly accurate information to the sensors, just to receive worse information back. While this does result in the desired behaviour, it doesn't provide the real separation between the FlightController\'s limited information and the real physics that is ultimately the crux of this project.
+
+Ultimately, the specification doesn't provide enough separation between the physical simulation of the system and the hardware simulation of the sensors and controller. Thus a full redraft was in order. 
+
+## FC-Se-Sys.1
+The solution was simple enough; multithreading architecture within this program was and will only ever be through message channels. This functionally results in each thread acting as its own program, using message channels as inherently narrow-scope APIs. Therefore, to create suitable isolation between the FlightController and the System, they must run on separate threads. Having the System generate in its own thread means it can fit into the architecture naturally. The full specification of all open channels is as follows:
+
+*Note that all messages are Enums; anything marked in quotes doesn't represent a String message, just conveys the gist of the enum\'s meaning.
+
+Channels:
+FlightController -> System: Sends the initial "go" message that starts the System simulation running, Rocket control commands ("fire the engine at 0.8 strength") any updates about timescale changes, and a "terminate" message when the sim is concluded.
+System -> Sensor: Watch channel (single overwriteable value) that contains all of the data the Sensors are currently requesting (eg closest body coords for Altimeter, Rocket orientation/acceleration for IMU)
+Sensor -> System: Single non-blocking channel that lets the sensor inform when requested information changes (Altimeter saying "check the current target is still the closest")
+Sensor -> FlightController: Watch channel sending detected information as it comes in
+FlightController -> Sensor: Control messages; "go", "reset" (to reset drift), "terminate".
+
+The Sensor -> System channel does slightly contravene the design intentions of all decision-making being led by the FC. However given that the only current use is an altimeter with a 40km range, this request is basically shortcutting some very trivial decision making on the part of the astronauts ("we're much closer to the moon than the earth now, we should point our altimeter that way"). Emulating this within the FC itself is considered to be not worth the effort; it doesn't really add anything of substance to the project.
+
+This architecture creates a much more passive communication system, with no need for complicated information exchange protocols. The one complicated factor is that we must now be careful to avoid race conditions between System and the sensors; namely it is imperative that for each tick, System must be done processing the tick before the Sensors can harvest any information. An intuitive solution for this is to send a message at the end of the System thread which is received by the Sensors on a blocking receiver which is situated earlier in the thread logic than any sensor reads of the data. However this results in 1 optionally polled watch call and 1 blocking call per loop; the entire system could be simplified by changing the data call from a watch channel to a blocking one and then letting the sensor loop itself decide if its actually polling the data (process it) or not (throw it away). 
+
+This creates an interesting dilemma; for a project like this, is more efficient code (sensor taking all data and polling only some of it) more or less important than separation of concerns (the Sensor struct emulates a sensor truthfully)? I decided that accurate emulation was more important, and that alternating blocking and non-blocking channels is a worthy price to pay for the sake of this. As such, each physics tick goes roughly as follows:
+
+### Protocol
+1F)   FC decides whether the timescale is appropriate for the current situation, and sends the new timescale to System and Sensors, regardless of if its changed or not.
+1Sys) System receives timescale information on a blocking channel, having waited here since the start of the tick. Calculates length of timescale based on this and tickrate.
+1Sen) Sensors receive timescale information on a blocking channel, having waited here since the start of the tick. Calculates length of timescale based on this and tickrate.
+
+2F)   FC sends rocket hardware commands to System
+2Sys) System simulates 

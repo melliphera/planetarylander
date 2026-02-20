@@ -19,12 +19,14 @@ dependencies = [
  "agc-utils",
  "criterion",
  "rand",
- "tokio",
 ]
 
 [[package]]
 name = "agc-utils"
 version = "0.1.0"
+dependencies = [
+ "tokio",
+]
 
 [[package]]
 name = "aho-corasick"

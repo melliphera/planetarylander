@@ -264,7 +264,7 @@ impl<const N: u8> Neg for FixedPoint<N> {
 
 impl<const N: u8> Display for FixedPoint<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:.8}", self.to_f64())
+        write!(f, "{:.6}", self.to_f64())
     }
 }
 
