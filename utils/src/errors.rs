@@ -1,4 +1,7 @@
+//! Contains error types used by agc_rocket and agc_utils
+/// Broad error type for errors that arise from the simulation.
 #[derive(Debug)]
+#[allow(missing_docs)]
 pub enum SimulationError {
     BadTimeStep,
     BadPrintIndex,
@@ -13,6 +16,8 @@ impl From<crate::FloatConversionError> for SimulationError {
     }
 }
 
+/// Error type related to communication issues between threads.
+#[allow(missing_docs)]
 pub enum BroadcastError {
     UnlinkedChannel,    // fails if sys_channel isnt linked.
     DeallocatedChannel, // fails if a message is sent to a channel that's been deallocated.

@@ -1,5 +1,5 @@
 //! contains various shorthands for different types of message channel, to have consistent and concise type names across the project.
-
+#![allow(missing_docs)] // crate is well commented and rearranging to fit doc comment requirements would hurt readability.
 use std::sync::mpsc;
 use std::time::Instant;
 
@@ -23,7 +23,7 @@ pub struct SensorReading<T> {
 #[derive(Clone, Copy, Debug)]
 pub enum FcMessageOut {
     Heartbeat, // Tells receiver thread "continue as you are". Thread-syncing no-op.
-    GoSynced(std::time::Instant), // Tells sensor/sys sim to start running mainloop. Start instant is provided to keep threads synced.
+    GoSynced(crate::ThreadClock), // Tells sensor/sys sim to start running mainloop. Carries a ThreadClock instance to keep threads synced.
     Restart, // Tells a faulty sensor to restart, recalibrating its drift. No use for System.
     NewTimescale(SolarFp, SolarFp), // Tells the sensor/system to operate on a new timescale (first value) and sends the current in-sim time for syncing (second value).
     //RocketCommand(data?),           // TODO - tells the System simulation to change the Rocket's instructions.

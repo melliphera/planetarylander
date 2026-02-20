@@ -15,7 +15,7 @@ criterion = "0.5"  # For benchmarks
 
 [lints.rust]
 unsafe_code = "forbid"
-missing_docs = "warn"
+missing_docs = "deny"
 
 [lints.clippy]
 arithmetic_side_effects = "warn"

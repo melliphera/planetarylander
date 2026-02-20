@@ -2,9 +2,10 @@
 use core::f64;
 
 use crate::planets::{Body, BODIES, N_BODIES};
-use agc_utils::{consts::*, errors::*, message_channels::*, PrintType, SolarFp, StepFp, StepVec3D};
+use agc_utils::{consts::*, errors::*, message_channels::*, SolarFp, StepFp, StepVec3D};
 
 /// stores the live state of all the bodies, and the means to simulate their movement.
+#[allow(missing_docs)]
 pub struct System {
     pub bodies: [Body; N_BODIES],
     time_passed: f64,
@@ -29,98 +30,27 @@ impl System {
         out
     }
 
+    /// enable logging of the calculation steps on the struct. Uses the builder pattern e.g. System::create().with_verlet_log().simulate()
     pub fn with_verlet_log(mut self) -> Self {
         self.log_verlet = true;
         self
     }
 
-    pub fn simulate(
-        &mut self,
-        print_type: PrintType,
-        print_interval: usize,
-    ) -> Result<(), SimulationError> {
-        let mut energy: f64;
-        let mut prev_energy = 0f64;
-        let mut max_energy = -f64::MAX; // value selected to ensure first actual value overwrites.
-        let mut min_energy = f64::MAX; // value selected to ensure first actual value overwrites.
-
-        for step in 0..STEPS {
-            if step % print_interval == 0 {
-                // print data for current step.
-                match print_type {
-                    PrintType::GraphSingle(p_index) => {
-                        let pb = match self.bodies.get(p_index) {
-                            Some(ind) => ind,
-                            None => {
-                                println!("Trying to print data on an invalid body!");
-                                return Err(SimulationError::BadPrintIndex);
-                            }
-                        };
-                        println!(
-                            "{}, {}, {}, {}",
-                            pb.name[..3].to_uppercase(),
-                            pb.position.0,
-                            pb.position.1,
-                            pb.position.2
-                        )
-                    }
-                    PrintType::GraphAll => {
-                        for pb in self.bodies.iter() {
-                            println!(
-                                "{}, {}, {}, {}",
-                                pb.name[..3].to_uppercase(),
-                                pb.position.0,
-                                pb.position.1,
-                                pb.position.2
-                            )
-                        }
-                    }
-                }
-            }
-
-            energy = self.step_time_forwards(TIME_STEP)?; // does the logical part, moving and accelerating bodies.
-
-            if step > 0 && step % print_interval == 0 {
-                println!(
-                    "System energy: {:.6e}\tchange: {:.6e} ({:+.2}%)",
-                    energy,
-                    energy - prev_energy,
-                    (energy / prev_energy - 1.0) * 100.0
-                )
-            }
-            // energy logging/maintenance
-            prev_energy = energy;
-            max_energy = max_energy.max(energy);
-            min_energy = min_energy.min(energy)
-        }
-        println!(
-            "\nmin energy: {:.4e}\nmax energy: {:.4e}\ndeviation: {}%",
-            min_energy,
-            max_energy,
-            (max_energy / min_energy - 1.0) * 100.0
-        );
-        Ok(())
-    }
-
     pub fn advance_time_multistep(
         &mut self,
         time: f64,
-        max_step_override: Option<SolarFp>,
+        max_step: SolarFp,
     ) -> Result<(), SimulationError> {
         //! this function steps from start time to end time in a sensible number of steps.
-        //! does TIME_STEP sized steps until one would too large, then one step for the remainder.
+        //! does max_step sized steps until one would be too large, then one step for the remainder.
         //! takes SolarFp as it will be called by the Rocket's event scheduler.
-        //! can take an optional 2nd value as override, for when precision is needed but decisions are far away.
-        let used_step = match max_step_override {
-            Some(val) => val.to_f64(),
-            None => TIME_STEP,
-        };
+        let max_step = max_step.to_f64();
         let t = time;
-        let full_steps = (t / used_step) as usize;
-        let last_step_length = t - (full_steps as f64 * used_step);
+        let full_steps = (t / max_step) as usize;
+        let last_step_length = t - (full_steps as f64 * max_step);
 
         for _i in 0..full_steps {
-            self.step_time_forwards(used_step)?;
+            self.step_time_forwards(max_step)?;
         }
 
         self.step_time_forwards(last_step_length)?;
@@ -129,7 +59,7 @@ impl System {
     }
 
     #[allow(clippy::indexing_slicing)] // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
-    fn step_time_forwards(&mut self, time: f64) -> Result<f64, SimulationError> {
+    pub(crate) fn step_time_forwards(&mut self, time: f64) -> Result<f64, SimulationError> {
         //! steps time forwards by the given time in seconds.
         //! Internal function only - used by simulate() and advance_time_multistep().
         self.time_passed += time;
@@ -268,37 +198,27 @@ impl System {
         Ok(new_sum)
     }
 
-    pub fn spawn_live_thread(
-        fc_listener: FcMessageReceiver,
-        initial_timescale: f64,
-    ) -> Result<(), SimulationError> {
+    pub fn spawn_live_thread(fc_listener: FcMessageReceiver) -> Result<(), SimulationError> {
         //! creates a new thread with a System instance primed for live-simulating inside it at the set tickrate.
         //! Doesn't actually start until it gets a Go signal with system epoch from the main thread.
         let mut s = System::create();
-        let _unused_handle =
-            std::thread::spawn(move || s.realtime_mainloop(fc_listener, initial_timescale));
+        let _unused_handle = std::thread::spawn(move || s.realtime_mainloop(fc_listener));
         Ok(())
     }
 
-    fn realtime_mainloop(
-        &mut self,
-        listener: FcMessageReceiver,
-        initial_timescale: f64,
-    ) -> Result<(), SimulationError> {
-        let go_call = listener.recv();
-        let epoch = match go_call {
+    fn realtime_mainloop(&mut self, listener: FcMessageReceiver) -> Result<(), SimulationError> {
+        // listen for GoSynced call, assign the thread clock to variable.
+        let mut thread_clock = match listener.recv() {
             Ok(FcMessageOut::GoSynced(t)) => t,
             Ok(_) | Err(_) => return Err(BroadcastError::WrongInit.into()), // first value received wasn't the right one.
         };
-        let mut tick_counter: u32 = 0;
-        let mut tick_time = epoch;
-        let mut tick_sim_duration = TICK_DELAY * initial_timescale;
+
         loop {
             // check for signal from FC - it doesn't matter if this is a tick late as it will never be done at critical times.
             match listener.try_recv() {
                 Ok(FcMessageOut::Kill) => break,
                 Ok(FcMessageOut::NewTimescale(scale, _epoch)) => {
-                    tick_sim_duration = TICK_DELAY * scale.to_f64()
+                    thread_clock.sim_time_per_tick = TICK_DELAY * scale.to_f64()
                 }
                 Ok(FcMessageOut::GoSynced(_)) | Ok(FcMessageOut::Restart) => {
                     return Err(BroadcastError::BadRuntimeSignal.into())
@@ -308,7 +228,7 @@ impl System {
             };
 
             // do actual tick logic here
-            self.step_time_forwards(tick_sim_duration)?;
+            self.step_time_forwards(thread_clock.sim_time_per_tick)?;
 
             // send context to Sensors that they can read data.
             let pb = &self.bodies[3];
@@ -321,17 +241,7 @@ impl System {
             );
 
             // handle clock
-            tick_counter = tick_counter.saturating_add(1);
-
-            let current_tick_elapsed = tick_time.elapsed();
-            tick_time = match epoch.checked_add(TICK_DELAY_AS_DURATION.saturating_mul(tick_counter))
-            {
-                Some(val) => val,
-                None => return Err(BroadcastError::UnlinkedChannel.into()), // bogus error but its okay; tick time failure will always occur on main thread first.
-            };
-
-            let until_next_tick = TICK_DELAY_AS_DURATION.saturating_sub(current_tick_elapsed);
-            std::thread::sleep(until_next_tick);
+            thread_clock.end_tick()?;
         }
         Ok(())
     }

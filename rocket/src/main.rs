@@ -15,10 +15,10 @@ fn main() -> Result<(), SimulationError> {
     fc.create_sensors();
 
     // create channel bundle for system <-> sensor
-    agc_physics::System::spawn_live_thread(system_receiver, 4096.0)?;
+    agc_physics::System::spawn_live_thread(system_receiver)?;
 
-    // broadcast to all threads to start the simulation.
-    let bc_result = fc.start();
+    // broadcast to all threads to start the simulation. Carries initial timescale data.
+    let bc_result = fc.start(128.0);
     match bc_result {
         Ok(()) => {}
         Err(_) => return Err(SimulationError::ThreadConnectionError), // this doesnt feel like an appropriate error to pass back.

@@ -23,7 +23,7 @@ impl From<FloatConversionError> for _QuaternionError {
 const _ERR_EPSILON: UnitFp = UnitFp::from_f64_trusted(1e-3);
 
 impl Quaternion {
-    fn _new(w: UnitFp, x: UnitFp, y: UnitFp, z: UnitFp) -> Result<Quaternion, _QuaternionError> {
+    fn new(w: UnitFp, x: UnitFp, y: UnitFp, z: UnitFp) -> Result<Quaternion, _QuaternionError> {
         //! creates a new Quaternion; checking the values provided produce a unit quaternion.
         let mag = w * w + x * x + y * y + z * z;
         if (mag - UnitFp::from_int(1)).abs() < _ERR_EPSILON {
@@ -34,13 +34,14 @@ impl Quaternion {
     }
 
     pub fn from_floats(w: f64, x: f64, y: f64, z: f64) -> Result<Quaternion, _QuaternionError> {
+        //! creates a Quaternion from float values.
         let (wufp, xufp, yufp, zufp) = (
             UnitFp::from_f64(w)?,
             UnitFp::from_f64(x)?,
             UnitFp::from_f64(y)?,
             UnitFp::from_f64(z)?,
         );
-        Quaternion::_new(wufp, xufp, yufp, zufp)
+        Quaternion::new(wufp, xufp, yufp, zufp)
     }
 
     fn _mult(&self, other: &Self) -> Self {

@@ -3,12 +3,12 @@
 //! and have authority over the flight hardware, but it's also responsible for controlling the timescale of the simulation; the flightcontroller will understand when it needs precision, and adjust time accordingly.
 
 use crate::hardware::sensors::{Sensor, SensorHandle};
-use agc_utils::errors::*;
 use agc_utils::message_channels::{
     FcMessageOut::{self, *},
     FcMessageReceiver, FcMessageSender,
 };
 use agc_utils::SolarFp;
+use agc_utils::{errors::*, ThreadClock};
 
 use super::sensors;
 
@@ -35,12 +35,16 @@ impl FlightController {
     }
 
     pub fn create_sensors(&mut self) {
+        // Generates all the sensors and handles message threads associated with them.
         let alti_handle = Sensor::Altimeter.generate();
         self.sensor_broadcast_handles[0] = Some(alti_handle);
     }
 
-    pub fn start(&mut self) -> Result<(), SimulationError> {
-        self.broadcast(GoSynced(std::time::Instant::now()))?;
+    pub fn start(&mut self, initial_scale: f64) -> Result<(), SimulationError> {
+        //! Sends a signal out to all listeners (who are blocked waiting for it) containing a syncing ThreadClock.
+        //! initial_scale represents the time-scale (fast-forwarding factor) that the sim initially runs at.
+        let tc = ThreadClock::new(initial_scale);
+        self.broadcast(GoSynced(tc))?;
         self.flightloop()?; // point of handover to src/logic/ -  This function can be found in src/logic/mod.rs
         Ok(())
     }

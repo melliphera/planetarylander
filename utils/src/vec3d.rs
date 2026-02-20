@@ -8,8 +8,13 @@ use crate::fixed_point::{
 #[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
 pub struct Vec3D<const N: u8>(pub FixedPoint<N>, pub FixedPoint<N>, pub FixedPoint<N>);
 
+/// 3D vector containing values of type FixedPoint with the same naming convention. See fixed_point.rs for details.
 pub type UnitVec3D = Vec3D<UNIT_FIXED_POINT_DECIMAL_BITS>;
+
+/// 3D vector containing values of type FixedPoint with the same naming convention. See fixed_point.rs for details.
 pub type StepVec3D = Vec3D<STEP_FIXED_POINT_DECIMAL_BITS>;
+
+/// 3D vector containing values of type FixedPoint with the same naming convention. See fixed_point.rs for details.
 pub type SolarVec3D = Vec3D<SOLAR_FIXED_POINT_DECIMAL_BITS>;
 
 impl<const N: u8> Default for Vec3D<N> {
@@ -120,11 +125,6 @@ impl UnitVec3D {
             self.2.scale_by_other(scalar),
         )
     }
-}
-
-pub enum PrintType {
-    GraphSingle(usize),
-    GraphAll,
 }
 
 #[cfg(test)]

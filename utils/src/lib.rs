@@ -1,6 +1,7 @@
+//! contains primitives, helpers and consts used by agc_rocket and agc_physics.
 mod fixed_point;
 mod quaternion;
-mod sim_sleep;
+mod thread_clock;
 mod vec3d;
 
 pub mod consts;
@@ -10,8 +11,8 @@ pub mod message_channels;
 pub use errors::*;
 pub use fixed_point::{FixedPoint, FloatConversionError, SolarFp, StepFp, UnitFp};
 pub use quaternion::Quaternion;
-pub use sim_sleep::sim_sleep;
-pub use vec3d::{PrintType, SolarVec3D, StepVec3D, UnitVec3D};
+pub use thread_clock::ThreadClock;
+pub use vec3d::{SolarVec3D, StepVec3D, UnitVec3D};
 
 // this is for testing!
 //mod vec3d_f64;

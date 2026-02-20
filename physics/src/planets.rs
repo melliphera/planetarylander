@@ -1,9 +1,11 @@
+//! Contains definitions and methods for celestial bodies, as well as a const array containing data on the Sun, all planets and Pluto.
 use agc_utils::{SolarFp, SolarVec3D, StepVec3D};
 use arrayvec::ArrayVec;
 use fixedstr::str16;
 
 /// stored gravity as a fixed point and a bit scalar. For the Sun, the scalar is 20, for gas giants its 10. For all else it is 0.
 #[derive(Debug, Clone, Copy)]
+#[allow(missing_docs)]
 pub struct Gravity {
     pub stored_solar: SolarFp,
     pub scale: u8,
@@ -16,10 +18,13 @@ impl Gravity {
     }
 }
 
+/// A physical body moving in the Solar System. Can be a Sun, planet, moon or even rocket.
 #[derive(Debug, Clone)]
+#[allow(missing_docs)]
 pub struct Body {
     pub name: str16,
-    pub gravity: Gravity, // G*m_1; divide by d^2 for acceleration of external body. Bitshifted by grav_scale
+    pub gravity: Gravity,
+    /// G*m_1; divide by d^2 for acceleration of external body. Bitshifted by grav_scale
     pub position: SolarVec3D,
     pub velocity: StepVec3D,
     pub parent_id: Option<usize>,
@@ -68,10 +73,13 @@ impl Body {
     }
 }
 
+/// number of celestial bodies in the simulation capable of exerting meaningful gravitational force (ie not Rocket).
 pub const N_BODIES: usize = 10;
+
+/// list of celestial bodies in the simulation capable of exerting meaningful gravitational force (ie not Rocket).
+/// ESTABLISHING Sun Centre at Epoch (SCE) as a static reference frame for the entire simulation.
+/// Epoch used for this and all other initial data is Jan-1-2000 00:00.
 pub const BODIES: [Body; N_BODIES] = [
-    // ESTABLISHING Sun Centre at Epoch (SCE) as a static reference frame for the entire simulation.
-    // Epoch used for this and all other initial data is Jan-1-2000 00:00.
     Body {
         name: str16::const_make("Sol"),
         gravity: Gravity {

@@ -11,38 +11,47 @@ pub(crate) const UNIT_FIXED_POINT_DECIMAL_BITS: u8 = 60;
 pub(crate) const STEP_FIXED_POINT_DECIMAL_BITS: u8 = 40;
 pub(crate) const SOLAR_FIXED_POINT_DECIMAL_BITS: u8 = 6; // bounded by Jupiter GM.
 
+/// FixedPoint variant with decimal bits defined by consts above. Used for quaternions, normalised vectors and other unit-scale maths.
 pub type UnitFp = FixedPoint<UNIT_FIXED_POINT_DECIMAL_BITS>;
+
+/// FixedPoint variant with decimal bits defined by consts above. Used for intermediate values during step calculations, such as acceleration.
 pub type StepFp = FixedPoint<STEP_FIXED_POINT_DECIMAL_BITS>;
+
+/// FixedPoint variant with decimal bits defined by consts above. Used for representation of solar-scale numbers such as positions and gravity values.
 pub type SolarFp = FixedPoint<SOLAR_FIXED_POINT_DECIMAL_BITS>;
 
-// const value of N means internal i64 representing 1 is 1 << N;
-// 56 sub unit bits means 10^-17 precision
-// 1 sign bit
-// 7 bits left for integers, meaning a value range of +/- 128
-// this leaves a very convenient interface for unit tests in the form of from_int().
-#[must_use] // avoids "i think this mutates the input" errors.
+/// const value of N means internal i64 representing 1 is 1 << N;
+/// Eg for UnitFp
+/// 60 sub unit bits means 10^-19 precision
+/// 1 sign bit
+/// 3 bits left for integers, meaning a value range of +/- 8
+/// this leaves a very convenient interface for unit tests in the form of from_int().
+#[must_use]
+/// [must_use] flag avoids "i think this mutates the input" errors.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct FixedPoint<const N: u8>(pub(crate) i64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
+/// Error type for invalid floats being fed into Fp values.
 pub enum FloatConversionError {
     NonNumericInput,
     OutOfBounds,
 }
 
 impl<const N: u8> FixedPoint<N> {
+    /// creates a FixedPoint which REPRESENTS the selected int. To create one with a specified stored int, use with_internal().
     pub fn from_int(int: i64) -> Self {
-        // creates a FixedPoint which REPRESENTS the selected int. To create one with a specified stored int, use with_internal().
         Self(int << N)
     }
 
+    /// Instantiates a FixedPoint with the specified internal value.
     pub fn with_internal(int: i64) -> Self {
-        // Instantiates a FixedPoint with the specified internal value.
         Self(int)
     }
 
+    /// handle trivial cases - subnormal is *significantly* below the finest precision.
     pub const fn from_f64(float: f64) -> Result<Self, FloatConversionError> {
-        // handle trivial cases - subnormal is *significantly* below the finest precision.
         if float == 0.0 || float.is_subnormal() {
             return Ok(Self(0));
         };
@@ -97,8 +106,8 @@ impl<const N: u8> FixedPoint<N> {
                                        // this function is only called either by from_f64 or directly in test cases only. Therefore that bound is sufficient.
     }
 
+    /// produces the f64 representation of the represented number.
     pub fn to_f64(&self) -> f64 {
-        // produces the f64 representation of the represented number.
         if self.0 == 0 {
             return 0.0f64;
         }
@@ -130,6 +139,7 @@ impl<const N: u8> FixedPoint<N> {
         f64::from_bits(composed)
     }
 
+    /// produces a strictly non-negative version of the number by calling abs() on its internal value.
     pub fn abs(&self) -> Self {
         Self(self.0.abs())
     }

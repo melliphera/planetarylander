@@ -5,7 +5,6 @@ use std::{thread, time::Instant};
 use rand::Rng;
 
 use agc_physics::planets::Body;
-use agc_utils::consts::*;
 use agc_utils::errors::*;
 use agc_utils::{SolarFp, SolarVec3D, StepFp, UnitFp};
 //use agc_utils::Vec3D;
@@ -58,12 +57,10 @@ impl Altimeter {
     fn mainloop(self) -> Result<(), BroadcastError> {
         //! Main operating loop of the altimeter.
         let go_call = self.receive_channel.recv();
-        let epoch = match go_call {
+        let mut thread_clock = match go_call {
             Ok(FcMessageOut::GoSynced(t)) => t,
             Ok(_) | Err(_) => return Err(BroadcastError::WrongInit), // first value received wasn't the right one.
         };
-        let mut tick_counter: u32 = 0;
-        let mut tick_time = epoch;
         loop {
             // await (blocking) signal from System that simulation is done.
 
@@ -83,24 +80,15 @@ impl Altimeter {
             }
 
             // do actual tick logic here
-            if tick_counter.is_multiple_of(128) {
+            if thread_clock.counter.is_multiple_of(128) {
                 println!(
-                    "Altimeter:\tTicks processed: {tick_counter}\tElapsed: {}",
-                    epoch.elapsed().as_secs_f32()
+                    "Altimeter:\tTicks processed: {}\tElapsed: {}",
+                    thread_clock.counter,
+                    thread_clock.epoch.elapsed().as_secs_f32()
                 );
             }
 
-            tick_counter = tick_counter.saturating_add(1);
-
-            let current_tick_elapsed = tick_time.elapsed();
-            tick_time = match epoch.checked_add(TICK_DELAY_AS_DURATION.saturating_mul(tick_counter))
-            {
-                Some(val) => val,
-                None => return Err(BroadcastError::UnlinkedChannel), // bogus error but its okay; tick time failure will always occur on main thread first.
-            };
-
-            let until_next_tick = TICK_DELAY_AS_DURATION.saturating_sub(current_tick_elapsed);
-            std::thread::sleep(until_next_tick);
+            thread_clock.end_tick()?;
         }
         println!("Altimeter loop exiting after Kill command.");
         Ok(())
