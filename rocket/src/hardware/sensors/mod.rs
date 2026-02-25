@@ -1,5 +1,4 @@
-use std::time::Instant;
-
+use agc_physics::orbit::SystemData;
 use agc_utils::{Quaternion, SolarFp, StepVec3D};
 use std::sync::mpsc;
 
@@ -32,7 +31,7 @@ pub enum SensorHandle {
 }
 
 impl Sensor {
-    pub fn generate(&self) -> SensorHandle {
+    pub fn generate(&self, sys_receiver: DataReceiver<SystemData>) -> SensorHandle {
         //! spawns a new thread which operates the sensor runtime.
 
         // create broadcast pair; not specific to each sensor.
@@ -44,11 +43,11 @@ impl Sensor {
                 let (data_sender, data_receiver) =
                     watch_channel::<SensorReading<SolarFp>>(SensorReading {
                         data: SolarFp::from_int(0),
-                        time: Instant::now(),
+                        time: 0.0,
                     });
 
                 // start the thread itself
-                Altimeter::start_thread(data_sender, broadcast_receiver);
+                Altimeter::start_thread(data_sender, broadcast_receiver, sys_receiver);
 
                 // return the handle
                 SensorHandle::Altimeter(broadcast_sender, data_receiver)

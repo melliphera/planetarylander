@@ -7,9 +7,12 @@ use std::{
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 
-pub(crate) const UNIT_FIXED_POINT_DECIMAL_BITS: u8 = 60;
-pub(crate) const STEP_FIXED_POINT_DECIMAL_BITS: u8 = 40;
-pub(crate) const SOLAR_FIXED_POINT_DECIMAL_BITS: u8 = 6; // bounded by Jupiter GM.
+/// Defines number of decimal bits in the FixedPoint type of the same name.
+pub const UNIT_FIXED_POINT_DECIMAL_BITS: u8 = 60;
+/// Defines number of decimal bits in the FixedPoint type of the same name.
+pub const STEP_FIXED_POINT_DECIMAL_BITS: u8 = 40;
+/// Defines number of decimal bits in the FixedPoint type of the same name.
+pub const SOLAR_FIXED_POINT_DECIMAL_BITS: u8 = 6; // bounded by Jupiter GM.
 
 /// FixedPoint variant with decimal bits defined by consts above. Used for quaternions, normalised vectors and other unit-scale maths.
 pub type UnitFp = FixedPoint<UNIT_FIXED_POINT_DECIMAL_BITS>;
@@ -48,6 +51,11 @@ impl<const N: u8> FixedPoint<N> {
     /// Instantiates a FixedPoint with the specified internal value.
     pub const fn with_internal(int: i64) -> Self {
         Self(int)
+    }
+
+    /// getter for the internal value of the type.
+    pub const fn internal_value(&self) -> i64 {
+        self.0
     }
 
     /// handle trivial cases - subnormal is *significantly* below the finest precision.
@@ -186,6 +194,15 @@ impl<const N: u8> FixedPoint<N> {
         let bit_shift = N - SOLAR_FIXED_POINT_DECIMAL_BITS;
         let step_divisor = FixedPoint::<N>::with_internal(divisor.0);
         (self / step_divisor).rshift(bit_shift)
+    }
+
+    pub fn scale_by_unit(self, scale: UnitFp) -> Self {
+        //! Multiply an FP of any type by UnitFp, keeping it's original form.
+        //! Currently only used as a thrust scalar, so guaranteed to less than 1, guaranteeing no overflow.
+        let multed_internals = self.0 as i128 * scale.0 as i128;
+        let shifted = multed_internals >> UNIT_FIXED_POINT_DECIMAL_BITS;
+        assert!(shifted.abs().leading_zeros() > 65);
+        Self(shifted as i64)
     }
 }
 

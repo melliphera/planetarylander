@@ -1,15 +1,36 @@
 //! This file is responsible for the time-step simulation to produce orbital motion.
 use core::f64;
 
-use crate::planets::{Body, BODIES, N_BODIES};
-use agc_utils::{consts::*, errors::*, message_channels::*, SolarFp, StepFp, StepVec3D};
+use crate::{
+    planets::{Body, BODIES, N_BODIES},
+    rocket::Rocket,
+};
+use agc_utils::{
+    consts::*, errors::*, message_channels::*, Quaternion, SolarFp, StepFp, StepVec3D,
+};
 
 /// stores the live state of all the bodies, and the means to simulate their movement.
 #[allow(missing_docs)]
 pub struct System {
     pub bodies: [Body; N_BODIES],
-    time_passed: f64,
     pub log_verlet: bool,
+    time_passed: f64,
+}
+
+/// responsible for packaging data for the System -> Sensor thread.
+/// As part of this, handles the logic of finding the closest planet for the Altimeter.
+pub(crate) struct SystemDataInterface {
+    closest_planet_index: usize, // for altimeter
+    ticks_since_last: u64,       // re-poll information
+}
+
+/// Data packet for System to send to Sensors. Includes any data that any sensor might be interested in.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug)]
+pub struct SystemData {
+    pub altitude: SolarFp, // rocket altitude over target body.
+    pub rocket_rotation: Quaternion,
+    pub rocket_accel: StepVec3D,
 }
 
 impl System {
@@ -198,20 +219,34 @@ impl System {
         Ok(new_sum)
     }
 
-    pub fn spawn_live_thread(fc_listener: FcMessageReceiver) -> Result<(), SimulationError> {
+    pub fn spawn_live_thread(
+        fc_listener: FcMessageReceiver,
+        rocket: Option<Rocket>,
+    ) -> Result<DataReceiver<SystemData>, SimulationError> {
         //! creates a new thread with a System instance primed for live-simulating inside it at the set tickrate.
         //! Doesn't actually start until it gets a Go signal with system epoch from the main thread.
+        //! Returns a listener for Sensors to gather data through.
         let mut s = System::create();
-        let _unused_handle = std::thread::spawn(move || s.realtime_mainloop(fc_listener));
-        Ok(())
+        let (sensor_sender, sensor_listener): (DataSender<SystemData>, DataReceiver<SystemData>) =
+            watch_channel(SensorReading::new());
+        let _unused_handle =
+            std::thread::spawn(move || s.realtime_mainloop(sensor_sender, fc_listener, rocket));
+        Ok(sensor_listener)
     }
 
-    fn realtime_mainloop(&mut self, listener: FcMessageReceiver) -> Result<(), SimulationError> {
+    fn realtime_mainloop(
+        &mut self,
+        sender: DataSender<SystemData>,
+        listener: FcMessageReceiver,
+        mut rocket: Option<Rocket>,
+    ) -> Result<(), SimulationError> {
         // listen for GoSynced call, assign the thread clock to variable.
         let mut thread_clock = match listener.recv() {
             Ok(FcMessageOut::GoSynced(t)) => t,
             Ok(_) | Err(_) => return Err(BroadcastError::WrongInit.into()), // first value received wasn't the right one.
         };
+
+        let mut data_interface = rocket.as_ref().map(|r| SystemDataInterface::new(r, self));
 
         loop {
             // check for signal from FC - it doesn't matter if this is a tick late as it will never be done at critical times.
@@ -224,26 +259,111 @@ impl System {
                     return Err(BroadcastError::BadRuntimeSignal.into())
                 }
                 Ok(FcMessageOut::Heartbeat) => {}
+                Ok(FcMessageOut::RocketCommand(com)) => {
+                    if let Some(ref mut rocket) = &mut rocket {
+                        rocket.process_command(com)
+                    }
+                }
                 Err(_) => {} // no message received.
             };
 
             // do actual tick logic here
+
+            // if Rocket is present, calculate its acceleration based on gravitation and its own instructions
+            if let Some(ref mut rocket) = &mut rocket {
+                // calculate acceleration on the rocket
+                rocket.calculate_accel(self);
+            }
+
+            // advance the planets in the simulation.
             self.step_time_forwards(thread_clock.sim_time_per_tick)?;
 
-            // send context to Sensors that they can read data.
-            let pb = &self.bodies[3];
-            println!(
-                "{}, {}, {}, {}",
-                pb.name[..3].to_uppercase(),
-                pb.position.0,
-                pb.position.1,
-                pb.position.2
-            );
+            if let Some(ref mut rocket) = &mut rocket {
+                // advance the rocket's position.
+                rocket.step_time_forwards(thread_clock.sim_time_per_tick)?;
+            }
+
+            // output rocket/body data to sensors.
+            if let (Some(ref mut sdi), Some(ref rocket)) = (&mut data_interface, &rocket) {
+                let reading = SensorReading {
+                    data: sdi.get_system_data(rocket, self),
+                    time: thread_clock.sim_time,
+                };
+                sender.send(reading)?;
+            }
 
             // handle clock
             thread_clock.end_tick()?;
         }
         Ok(())
+    }
+}
+
+impl SystemDataInterface {
+    fn new(rocket: &Rocket, sys: &System) -> Self {
+        let mut s = Self {
+            closest_planet_index: 3,
+            ticks_since_last: 0,
+        };
+        s.closest_planet_index = s.find_closest(rocket, sys);
+        s
+    }
+
+    fn get_system_data(&mut self, rocket: &Rocket, sys: &System) -> SystemData {
+        //! rocket_accel is calculated outside this function (as a method of the Rocket object) otherwise either it is calculated twice
+        //! or this function has physics side effects which is very much not the design intent.
+        if self.ticks_since_last == 1000 {
+            self.closest_planet_index = self.find_closest(rocket, sys);
+            self.ticks_since_last = 0;
+        }
+        self.ticks_since_last += 1;
+
+        #[allow(clippy::indexing_slicing)]
+        // index is only ever set by querying the array itself. array is fixed length.
+        let body = &sys.bodies[self.closest_planet_index];
+
+        SystemData {
+            altitude: rocket.position.vector_to(&body.position).magnitude() - body.radius,
+            rocket_rotation: rocket.orientation,
+            rocket_accel: rocket.acceleration,
+        }
+    }
+
+    fn find_closest(&self, rocket: &Rocket, sys: &System) -> usize {
+        //! finds closest planet to the rocket using Chebyshev distance to check altimeter is targeting right body.
+        let mut closest_dist = SolarFp::with_internal(i64::MAX);
+        let mut closest_body: usize = 0;
+
+        let rpos = rocket.position;
+        for (i, body) in sys.bodies.iter().enumerate() {
+            let chebyshev = (body.position.0 - rpos.0)
+                .abs()
+                .max((body.position.1 - rpos.1).abs())
+                .max((body.position.2 - rpos.2).abs());
+
+            if chebyshev < closest_dist {
+                closest_dist = chebyshev;
+                closest_body = i;
+            }
+        }
+        closest_body
+    }
+}
+
+impl SystemData {
+    pub fn new() -> Self {
+        //! creates a new SystemData type with default information. Used to initialise SystemData watch channels.
+        SystemData {
+            altitude: SolarFp::from_int(0),
+            rocket_rotation: Quaternion::default(),
+            rocket_accel: StepVec3D::new(),
+        }
+    }
+}
+
+impl Default for SystemData {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

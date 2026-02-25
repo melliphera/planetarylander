@@ -12,10 +12,11 @@ use crate::{
 #[derive(Clone, Copy, Debug)]
 #[allow(missing_docs)]
 pub struct ThreadClock {
-    pub epoch: Instant, // used to keep ticks synced
-    current_tick_start: Instant,
-    tick_length: Duration,
-    pub counter: u32,           // number of ticks passed
+    pub epoch: Instant, // realtime moment of creation. used to keep ticks synced
+    pub current_tick_start: Instant, // realtime start moment of the current tick.
+    tick_length: Duration, // realtime length of a tick
+    pub counter: u32,   // number of ticks passed
+    pub sim_time: f64,  // current run time of the simulation in-sim.
     pub sim_time_per_tick: f64, // sim time passed (in seconds) per simulation tick.
 }
 
@@ -26,7 +27,7 @@ impl ThreadClock {
         let init_instant = Instant::now();
         let stpt = TICK_DELAY * initial_time_scale;
         assert!(
-            stpt > 0.5,
+            stpt >= 0.5,
             "Sim time per tick must be greater than 0.5s. Current: {stpt:.4}s"
         );
         Self {
@@ -34,6 +35,7 @@ impl ThreadClock {
             current_tick_start: init_instant,
             tick_length: TICK_DELAY_AS_DURATION,
             counter: 0,
+            sim_time: 0.0,
             sim_time_per_tick: stpt,
         }
     }
@@ -41,6 +43,7 @@ impl ThreadClock {
     pub fn end_tick(&mut self) -> Result<(), BroadcastError> {
         //! handles the ending of a tick by incrementing the tick counter and then sleeping to the start of the next tick.
         self.counter = self.counter.saturating_add(1);
+        self.sim_time += self.sim_time_per_tick;
 
         let current_tick_elapsed = self.current_tick_start.elapsed();
         self.current_tick_start = match self

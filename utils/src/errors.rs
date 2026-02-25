@@ -16,6 +16,12 @@ impl From<crate::FloatConversionError> for SimulationError {
     }
 }
 
+impl<T> From<tokio::sync::watch::error::SendError<T>> for SimulationError {
+    fn from(_value: tokio::sync::watch::error::SendError<T>) -> Self {
+        Self::ThreadConnectionError
+    }
+}
+
 /// Error type related to communication issues between threads.
 #[allow(missing_docs)]
 pub enum BroadcastError {

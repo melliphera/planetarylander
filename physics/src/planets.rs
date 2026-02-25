@@ -24,6 +24,7 @@ impl Gravity {
 pub struct Body {
     pub name: str16,
     pub gravity: Gravity,
+    pub radius: SolarFp,
     /// G*m_1; divide by d^2 for acceleration of external body. Bitshifted by grav_scale
     pub position: SolarVec3D,
     pub velocity: StepVec3D,
@@ -32,11 +33,13 @@ pub struct Body {
     pub id: usize,
 }
 
+#[allow(clippy::too_many_arguments)] // 8/7, minimising this just adds unnecessary abstraction and it's only used in const.
 impl Body {
     const fn new(
         name: &str,
         gravity: f64,
         scale: u8,
+        radius: i64,
         position: SolarVec3D,
         velocity: StepVec3D,
         parent_id: usize,
@@ -49,6 +52,7 @@ impl Body {
                 stored_solar: SolarFp::from_f64_trusted(gravity),
                 scale,
             },
+            radius: SolarFp::from_int(radius),
             position,
             velocity,
             parent_id: Some(parent_id),
@@ -86,6 +90,7 @@ pub const BODIES: [Body; N_BODIES] = [
             stored_solar: SolarFp::from_f64_trusted(1.26558e14),
             scale: 20,
         },
+        radius: SolarFp::from_int(695_700_000),
         position: SolarVec3D::from_floats_trusted(0.0, 0.0, 0.0),
         velocity: StepVec3D::from_floats_trusted(0.0, 0.0, 0.0),
         parent_id: None,
@@ -96,6 +101,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Mercury",
         2.20375e13,
         0,
+        2_440_000,
         SolarVec3D::from_floats_trusted(
             -2.105_262_107_244_07E10,
             -6.640_663_812_253_43E10,
@@ -113,6 +119,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Venus",
         3.24924e14,
         0,
+        6_052_000,
         SolarVec3D::from_floats_trusted(
             -1.075_055_502_719_85E11,
             -3.366520666522362E+09,
@@ -130,6 +137,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Earth",
         3.98438e14,
         0,
+        6_371_000,
         SolarVec3D::from_floats_trusted(
             -2.521092855899356E+10,
             1.449279195838006E+11,
@@ -147,6 +155,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Mars",
         4.27277e13,
         0,
+        3_390_000,
         SolarVec3D::from_floats_trusted(
             2.079950549836171E+11,
             -3.143009713942494E+09,
@@ -164,6 +173,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Jupiter",
         1.23183e14,
         10,
+        69_911_000,
         SolarVec3D::from_floats_trusted(
             5.989091645401344E+11,
             4.391225866604841E+11,
@@ -181,6 +191,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Saturn",
         3.7041e13,
         10,
+        58_232_000,
         SolarVec3D::from_floats_trusted(
             9.587063371733198E+11,
             9.825652104588115E+11,
@@ -198,6 +209,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Uranus",
         5.65811e12,
         10,
+        25_362_000,
         SolarVec3D::from_floats_trusted(
             2.158774481135687E+12,
             -2.054825439980978E+12,
@@ -215,6 +227,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Neptune",
         6.67459e12,
         10,
+        24_622_000,
         SolarVec3D::from_floats_trusted(
             2.514853560731005E+12,
             -3.738847414418683E+12,
@@ -232,6 +245,7 @@ pub const BODIES: [Body; N_BODIES] = [
         "Pluto",
         8.72292e11,
         0,
+        2_376_000,
         SolarVec3D::from_floats_trusted(
             -1.477558207142231E+12,
             -4.182460280867265E+12,

@@ -2,7 +2,7 @@
 use std::time::Duration;
 
 /// tick rate (ticks per second) at which simulations are run.
-pub const TICK_RATE: u16 = 8;
+pub const TICK_RATE: u16 = 128;
 
 /// time between each tick in seconds.
 pub const TICK_DELAY: f64 = 1.0f64 / TICK_RATE as f64;

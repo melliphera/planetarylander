@@ -2,5 +2,6 @@
 pub mod free_simulate;
 pub mod orbit;
 pub mod planets;
+pub mod rocket;
 
 pub use orbit::System;

@@ -119,11 +119,18 @@ impl<const N: u8> Vec3D<N> {
 
 impl UnitVec3D {
     pub fn scale_from_unit<const N: u8>(self, scalar: FixedPoint<N>) -> Vec3D<N> {
+        //! scales a UnitVec Self up by a non-unit FixedPoint, providing a Vec of the same scale type (ie Step, Solar) as the scalar.
         Vec3D(
             self.0.scale_by_other(scalar),
             self.1.scale_by_other(scalar),
             self.2.scale_by_other(scalar),
         )
+    }
+}
+
+impl<const N: u8> std::fmt::Display for Vec3D<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {}, {}]", self.0, self.1, self.2)
     }
 }
 

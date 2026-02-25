@@ -1,12 +1,13 @@
 //! contains the struct definition for the Altimeter. This sensor works between 40km and gives the distance to the surface.
 
-use std::{thread, time::Instant};
+use std::sync::mpsc::TryRecvError;
+use std::thread;
 
+use agc_physics::orbit::SystemData;
 use rand::Rng;
 
-use agc_physics::planets::Body;
-use agc_utils::errors::*;
-use agc_utils::{SolarFp, SolarVec3D, StepFp, UnitFp};
+use agc_utils::{errors::*, ThreadClock};
+use agc_utils::{SolarFp, StepFp, UnitFp};
 //use agc_utils::Vec3D;
 
 use super::{
@@ -30,17 +31,22 @@ pub struct Altimeter {
 
     send_channel: DataSender<SolarFp>, // send channel for SensorReading<SolarFp>.
     receive_channel: FcMessageReceiver, // receive channel for ToSensorBroadcast
+    data_receive_channel: DataReceiver<SystemData>, // receive channel for raw data from System.
 }
 
 impl Altimeter {
-    pub fn start_thread(send_channel: DataSender<SolarFp>, receive_channel: FcMessageReceiver) {
+    pub fn start_thread(
+        send_channel: DataSender<SolarFp>,
+        receive_channel: FcMessageReceiver,
+        data_receive_channel: DataReceiver<SystemData>,
+    ) {
         // instantiate the altimeter itself; assume it starts in perfect condition
         let alti = Altimeter {
             state: SensorState::Operational,
             variance: UnitFp::from_int(0),
             last_reading: SensorReading {
                 data: SolarFp::from_int(0),
-                time: Instant::now(),
+                time: 0.0,
             },
             drift: SolarFp::from_int(0),
             drift_rate: UnitFp::from_int(0),
@@ -49,9 +55,10 @@ impl Altimeter {
             reading_body: 3, // Earth; that's where we're starting.
             send_channel,
             receive_channel,
+            data_receive_channel,
         };
 
-        let _unused_handle = thread::spawn(|| alti.mainloop());
+        let _unused_handle = thread::spawn(move || alti.mainloop());
     }
 
     fn mainloop(self) -> Result<(), BroadcastError> {
@@ -62,31 +69,32 @@ impl Altimeter {
             Ok(_) | Err(_) => return Err(BroadcastError::WrongInit), // first value received wasn't the right one.
         };
         loop {
-            // await (blocking) signal from System that simulation is done.
-
             // watch (non-blocking) signal from FC - it doesn't matter if this is a tick late as it will never be done at critical times.
-            if let Ok(transmission) = self.receive_channel.try_recv() {
-                match transmission {
-                    FcMessageOut::GoSynced(_) => return Err(BroadcastError::BadRuntimeSignal), // bogus signal to be receiving at this point
-                    FcMessageOut::Restart => {
-                        unimplemented!("Need to write restart function")
-                    }
-                    FcMessageOut::NewTimescale(_, _) => {
-                        unimplemented!("Timescale handling not implemented yet.")
-                    }
-                    FcMessageOut::Heartbeat => {}
-                    FcMessageOut::Kill => break,
+            match self.receive_channel.try_recv() {
+                // Sensor-appropriate messages
+                Ok(FcMessageOut::Restart) => {
+                    unimplemented!("Need to write restart function")
                 }
+                Ok(FcMessageOut::NewTimescale(_, _)) => {
+                    unimplemented!("Timescale handling not implemented yet.")
+                }
+
+                // Control messages
+                Ok(FcMessageOut::Heartbeat) => {}
+                Ok(FcMessageOut::Kill) => break, // Graceful end-of-simulation termination.
+
+                // Bad messages
+                Ok(FcMessageOut::GoSynced(_)) => return Err(BroadcastError::BadRuntimeSignal), // bogus signal to be receiving at this point
+                Ok(FcMessageOut::RocketCommand(_)) => return Err(BroadcastError::BadRuntimeSignal), // Sensors shouldn't receive this signal.
+
+                // error types
+                Err(TryRecvError::Empty) => {} // No message received, continue as normal.
+                Err(_) => return Err(BroadcastError::DeallocatedChannel), // Actual error (sender has been deallocated), propagate.
             }
 
             // do actual tick logic here
-            if thread_clock.counter.is_multiple_of(128) {
-                println!(
-                    "Altimeter:\tTicks processed: {}\tElapsed: {}",
-                    thread_clock.counter,
-                    thread_clock.epoch.elapsed().as_secs_f32()
-                );
-            }
+            let true_earth_dist = *self.data_receive_channel.borrow();
+            println!("EAR-dist: {}m", true_earth_dist.data.altitude);
 
             thread_clock.end_tick()?;
         }
@@ -94,38 +102,36 @@ impl Altimeter {
         Ok(())
     }
 
-    pub fn poll(&mut self, location: SolarVec3D, target: &Body) {
+    pub fn poll(&mut self, true_distance: SolarFp, clock: ThreadClock) {
         //! internal polling of data. Error type is just log/debug str as within the scope of the program, sensors need to fail silently.
         //! note that this does not send any data anywhere, it just updates the internally held value.
         match self.state {
             Operational => {
-                let true_distance = location.vector_to(&target.position).magnitude();
                 if true_distance < self.max_range {
                     self.last_reading = SensorReading {
 
                         #[allow(clippy::arithmetic_side_effects)] // it's complaining about the addition. We know for a fact that variance is in bounds.
                         data: (UnitFp::from_int(1) + self.variance).scale_by_other(true_distance)
                             + self.drift,
-                        time: Instant::now(), // TODO create wrapper type for Simulation time.
+                        time: clock.sim_time, // TODO create wrapper type for Simulation time.
                     }
                 }
             }
             Variant => {
-                let true_distance = location.vector_to(&target.position).magnitude();
                 if true_distance < self.max_range {
                     self.last_reading = SensorReading {
 
                         #[allow(clippy::arithmetic_side_effects)] // it's complaining about the addition. We know for a fact that variance is in bounds.
                         data: (UnitFp::from_int(1) + self.variance * UnitFp::from_int(5))
                             .scale_by_other(true_distance) + self.drift,
-                        time: Instant::now(), // TODO create wrapper type for Simulation time.
+                        time: clock.sim_time, // TODO create wrapper type for Simulation time.
                     }
                 }
             }
             Garbage => {
                 self.last_reading = SensorReading {
                     data: SolarFp::with_internal(rand::thread_rng().gen()), // garbage data
-                    time: Instant::now(),
+                    time: clock.sim_time, // TODO create wrapper type for Simulation time.
                 }
             }
             Frozen(_) | Rebooting(_) => {

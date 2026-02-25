@@ -1,11 +1,11 @@
 //! contains primitives, helpers and consts used by agc_rocket and agc_physics.
-mod fixed_point;
 mod quaternion;
 mod thread_clock;
 mod vec3d;
 
 pub mod consts;
 pub mod errors;
+pub mod fixed_point;
 pub mod message_channels;
 
 pub use errors::*;

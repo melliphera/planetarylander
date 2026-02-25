@@ -64,7 +64,7 @@ impl Quaternion {
         Quaternion(UnitFp::from_int(0), vector.0, vector.1, vector.2)
     }
 
-    fn _to_forward_vector(&self) -> Vec3D<UNIT_FIXED_POINT_DECIMAL_BITS> {
+    pub fn to_forward_vector(&self) -> Vec3D<UNIT_FIXED_POINT_DECIMAL_BITS> {
         //! find the unit-length forward vector of the quaternion.
         //! Done by producing a quaternion representing the principal vector and then multiplying the product by q's conjugate.
         //! Multiplication is done by hand rather than via mult() as many of the operations cancel.
@@ -80,6 +80,17 @@ impl Quaternion {
             && (self.1 - other.1).abs() < _ERR_EPSILON
             && (self.2 - other.2).abs() < _ERR_EPSILON
             && (self.3 - other.3).abs() < _ERR_EPSILON
+    }
+}
+
+impl Default for Quaternion {
+    fn default() -> Self {
+        Quaternion(
+            UnitFp::from_int(1),
+            UnitFp::from_int(0),
+            UnitFp::from_int(0),
+            UnitFp::from_int(0),
+        )
     }
 }
 
@@ -160,7 +171,7 @@ mod quaternion_tests {
         assert_eq!(
             Quaternion::from_floats(1.0, 0.0, 0.0, 0.0)
                 .unwrap()
-                ._to_forward_vector(),
+                .to_forward_vector(),
             Vec3D::from_floats(1.0, 0.0, 0.0).unwrap()
         )
     }

@@ -3,7 +3,9 @@
 //! and have authority over the flight hardware, but it's also responsible for controlling the timescale of the simulation; the flightcontroller will understand when it needs precision, and adjust time accordingly.
 
 use crate::hardware::sensors::{Sensor, SensorHandle};
+use agc_physics::orbit::SystemData;
 use agc_utils::message_channels::{
+    DataReceiver,
     FcMessageOut::{self, *},
     FcMessageReceiver, FcMessageSender,
 };
@@ -34,9 +36,9 @@ impl FlightController {
         rx
     }
 
-    pub fn create_sensors(&mut self) {
+    pub fn create_sensors(&mut self, sys_receiver: DataReceiver<SystemData>) {
         // Generates all the sensors and handles message threads associated with them.
-        let alti_handle = Sensor::Altimeter.generate();
+        let alti_handle = Sensor::Altimeter.generate(sys_receiver.clone());
         self.sensor_broadcast_handles[0] = Some(alti_handle);
     }
 
