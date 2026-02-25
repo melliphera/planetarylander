@@ -23,7 +23,7 @@ fn main() -> Result<(), SimulationError> {
     fc.create_sensors(sys_to_sensor_receiver);
 
     // broadcast to all threads to start the simulation. Carries initial timescale data.
-    let bc_result = fc.start(64.0);
+    let bc_result = fc.start(1280.0);
     match bc_result {
         Ok(()) => {}
         Err(_) => return Err(SimulationError::ThreadConnectionError), // this doesnt feel like an appropriate error to pass back.

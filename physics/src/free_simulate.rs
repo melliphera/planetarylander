@@ -66,7 +66,7 @@ impl crate::System {
                 }
             }
 
-            energy = self.step_time_forwards(TIME_STEP)?; // does the logical part, moving and accelerating bodies.
+            energy = self.step_time_forwards(TIME_STEP, None)?; // does the logical part, moving and accelerating bodies.
 
             if step > 0 && step % print_interval == 0 {
                 println!(

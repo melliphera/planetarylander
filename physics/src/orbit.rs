@@ -71,16 +71,20 @@ impl System {
         let last_step_length = t - (full_steps as f64 * max_step);
 
         for _i in 0..full_steps {
-            self.step_time_forwards(max_step)?;
+            self.step_time_forwards(max_step, None)?;
         }
 
-        self.step_time_forwards(last_step_length)?;
+        self.step_time_forwards(last_step_length, None)?;
 
         Ok(())
     }
 
     #[allow(clippy::indexing_slicing)] // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
-    pub(crate) fn step_time_forwards(&mut self, time: f64) -> Result<f64, SimulationError> {
+    pub(crate) fn step_time_forwards(
+        &mut self,
+        time: f64,
+        mut rocket: Option<&mut Rocket>,
+    ) -> Result<f64, SimulationError> {
         //! steps time forwards by the given time in seconds.
         //! Internal function only - used by simulate() and advance_time_multistep().
         self.time_passed += time;
@@ -137,8 +141,6 @@ impl System {
             accelerations[i] = accel;
         }
 
-        let mut vbuffer = String::new();
-
         // apply adjustments in velocity/displacement with verlet method.
         #[allow(clippy::indexing_slicing)]
         // all indexing which occurs herein is *explicitly* bounded to the array length. Arrays are instantiated size N, and indexed with i.
@@ -146,34 +148,20 @@ impl System {
             let current = &mut self.bodies[i];
             let accel_first = accelerations[i];
 
-            // verlet method
-            if self.log_verlet {
-                vbuffer += &format!("Applying step to: {}\n", current.name.to_ascii_upper());
-            }
-
             // apply half of acceleration-time to velocity
             let velocity_from_accel = accel_first.scale(half_time_step_fp);
-
-            if self.log_verlet {
-                vbuffer += &format!(
-                    "v_0:\t{:?};\nadding\t{:?}\n",
-                    current.velocity, velocity_from_accel
-                );
-            }
-
             temp_velocities[i] = current.velocity.add(&velocity_from_accel);
 
             // apply effects of velocity on position
             let position_from_velocity = temp_velocities[i].as_solar().scale(time_step_fp);
-
-            if self.log_verlet {
-                vbuffer += &format!(
-                    "pos:\t{:?};\nadding\t{:?}\n",
-                    current.position, position_from_velocity
-                );
-            }
             current.position = current.position.add(&position_from_velocity);
         }
+
+        // does the above steps on the Rocket object.
+        if let Some(ref mut r) = rocket {
+            r.verlet_1(self, time)?;
+        }
+
         // new loop - recalculate acceleration - as above
         // create iterator that reads all other planets.
         for (i, t_vel) in temp_velocities.iter().enumerate() {
@@ -193,25 +181,11 @@ impl System {
 
             // add other half of acceleration-time to velocity with new accel.
             let second_velocity_from_accel = accel_second.scale(half_time_step_fp);
-            if self.log_verlet {
-                vbuffer += &format!(
-                    "v_0.5:\t{:?}\nadding\t{:?}\n\n",
-                    t_vel, second_velocity_from_accel
-                );
-            }
             current.velocity = t_vel.add(&second_velocity_from_accel);
-
-            // show result of computations
-            if self.log_verlet {
-                vbuffer += &format!(
-                    "final_pos: {:?}\nfinal_vel: {:?}\n\n",
-                    current.position, current.velocity
-                );
-            }
         }
-
-        if self.log_verlet {
-            println!("{}", vbuffer)
+        // do the above steps for Rocket object.
+        if let Some(ref mut r) = rocket {
+            r.verlet_2(self, time)?;
         }
 
         // handle energy calculations.
@@ -268,20 +242,8 @@ impl System {
             };
 
             // do actual tick logic here
-
-            // if Rocket is present, calculate its acceleration based on gravitation and its own instructions
-            if let Some(ref mut rocket) = &mut rocket {
-                // calculate acceleration on the rocket
-                rocket.calculate_accel(self);
-            }
-
-            // advance the planets in the simulation.
-            self.step_time_forwards(thread_clock.sim_time_per_tick)?;
-
-            if let Some(ref mut rocket) = &mut rocket {
-                // advance the rocket's position.
-                rocket.step_time_forwards(thread_clock.sim_time_per_tick)?;
-            }
+            // advance the planets and the rocket in the simulation.
+            self.step_time_forwards(thread_clock.sim_time_per_tick, rocket.as_mut())?;
 
             // output rocket/body data to sensors.
             if let (Some(ref mut sdi), Some(ref rocket)) = (&mut data_interface, &rocket) {

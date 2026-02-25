@@ -3,8 +3,8 @@
 //! Instruments must never store values acquired directly from Rocket without processing them to add their own inaccuracy first (this would be cheating!)
 
 use agc_utils::{
-    errors::SimulationError, message_channels::RC, Quaternion, SolarFp, SolarVec3D, StepFp,
-    StepVec3D, UnitFp,
+    message_channels::RC, Quaternion, SimulationError, SolarFp, SolarVec3D, StepFp, StepVec3D,
+    UnitFp,
 };
 
 use crate::{planets::Body, System};
@@ -59,7 +59,9 @@ impl Rocket {
             1.449342948654861E+11,
             -6.164432727165142E+05,
         );
-
+        r.velocity = r
+            .velocity
+            .add(&StepVec3D::from_floats_trusted(8161.0, 1400.0, -31.0));
         r
     }
 
@@ -128,22 +130,26 @@ impl Rocket {
         direction_vector.scale_from_unit(grav)
     }
 
-    pub(crate) fn step_time_forwards(&mut self, time: f64) -> Result<(), SimulationError> {
-        // not bothering with Verlet here as stability isn't necessary in the same way.
-        // However position will still be calculated using an average of start and end velocity.
-        let half_t = StepFp::from_f64(time / 2.0)?;
-        let t = SolarFp::from_f64(time)?;
+    pub(crate) fn verlet_1(&mut self, sys: &System, time: f64) -> Result<(), SimulationError> {
+        let half_time = StepFp::from_f64(time / 2.0)?;
+        let full_time = SolarFp::from_f64(time)?;
 
-        // add half of accel-time to velocity to get average over the step.
-        self.velocity = self.velocity.add(&self.acceleration.scale(half_t));
+        self.calculate_accel(sys);
 
-        // move position based on average velocity.
-        self.position = self.position.add(&self.velocity.as_solar().scale(t));
+        // add half of acceleration-time to velocity and use that to work out new position.
+        self.velocity = self.velocity.add(&self.acceleration.scale(half_time));
+        self.position = self
+            .position
+            .add(&self.velocity.as_solar().scale(full_time));
+        Ok(())
+    }
 
-        // add the other half of accel-time to get end-of-step velocity.
-        self.velocity = self.velocity.add(&self.acceleration.scale(half_t));
+    pub(crate) fn verlet_2(&mut self, sys: &System, time: f64) -> Result<(), SimulationError> {
+        let half_time = StepFp::from_f64(time / 2.0)?;
 
-        //println!("ROCKET DATA:\npos: {}\nvel: {}\naccel: {}", self.position, self.velocity, self.acceleration);
+        // recalculate acceleration from new position and use it to get new velocity.
+        self.calculate_accel(sys);
+        self.velocity = self.velocity.add(&self.acceleration.scale(half_time));
 
         Ok(())
     }
