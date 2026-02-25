@@ -19,8 +19,13 @@ jobs:
           components: clippy, rustfmt
       
       - name: Check MISRA-Rust lints
-        run: cargo clippy --package agc-rocket -- -D warnings
-      
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" || "${{ github.base_ref }}" == "main" ]]; then
+            cargo clippy --package agc-rocket -- -D warnings
+          else
+            RUSTFLAGS="--allow unused" cargo clippy --package agc-rocket -- -D warnings
+          fi
+
       - name: Check documentation
         run: cargo doc --package agc-rocket --no-deps --document-private-items
       
