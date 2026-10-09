@@ -1,0 +1,23 @@
+name: Workspace CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Check formatting (all crates)
+        run: cargo fmt --all -- --check
+
+      - name: Run all tests (physics, rocket, utils)
+        run: cargo test --workspace
+
+      - name: Lint all crates
+        run: cargo clippy --workspace -- -D warnings
