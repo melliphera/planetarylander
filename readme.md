@@ -9,7 +9,8 @@ A historically-inspired spaceflight simulator implementing realistic orbital mec
 This is a work in progress, and the design below describes where the project is heading.
 
 - **Done:** the physics engine (`physics/`): an n-body simulation of the planets using a velocity Verlet integrator, with energy tracking, built on the custom fixed-point and vector types in `utils/`.
-- **In progress:** the flight controller and sensor models (`rocket/`). The crate structure, sensor state machine and altimeter model are in place; the controller logic is not yet written.
+- **In progress:** the flight controller and sensor models (`rocket/`). Active development is on the [`feature/rocket-core`](https://github.com/melliphera/planetarylander/tree/feature/rocket-core) branch, which adds the solar system, sensor and controller threads with their message channels. It merges into `main` once it passes the strict MISRA-Rust lint gate, which denies unused code on `main`.
+- **Next:** the controller's sensor handling: outlier rejection, null value handling and Kalman-style state estimation to keep it working when its inputs fail.
 
 Design decisions and their reasoning are recorded in [`development_notes.md`](development_notes.md).
 
