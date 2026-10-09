@@ -87,7 +87,7 @@ impl Quaternion {
 mod quaternion_tests {
     use crate::{vec3d::Vec3D, FloatConversionError};
 
-    use super::{Quaternion, UnitFp, _QuaternionError};
+    use super::{_QuaternionError, Quaternion, UnitFp};
 
     #[test]
     fn test_new_valid() {
