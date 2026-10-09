@@ -2,6 +2,30 @@
 
 A historically-inspired spaceflight simulator implementing realistic orbital mechanics and safety-critical flight control systems. The project separates concerns between high-fidelity physics simulation and constrained embedded systems programming, mirroring the engineering challenges of the Apollo program.
 
+[![Workspace CI](https://github.com/melliphera/planetarylander/actions/workflows/workspace.yml/badge.svg)](https://github.com/melliphera/planetarylander/actions/workflows/workspace.yml)
+
+## Project status
+
+This is a work in progress, and the design below describes where the project is heading.
+
+- **Done:** the physics engine (`physics/`): an n-body simulation of the planets using a velocity Verlet integrator, with energy tracking, built on the custom fixed-point and vector types in `utils/`.
+- **In progress:** the flight controller and sensor models (`rocket/`). Active development is on the [`feature/rocket-core`](https://github.com/melliphera/planetarylander/tree/feature/rocket-core) branch, which adds the solar system, sensor and controller threads with their message channels. It merges into `main` once it passes the strict MISRA-Rust lint gate, which denies unused code on `main`.
+- **Next:** the controller's sensor handling: outlier rejection, null value handling and Kalman-style state estimation to keep it working when its inputs fail.
+
+Design decisions and their reasoning are recorded in [`development_notes.md`](development_notes.md).
+
+## Building and testing
+
+Requires a stable Rust toolchain.
+
+```sh
+cargo test --workspace          # run every crate's unit tests
+cargo clippy --workspace        # lints, including the MISRA-Rust rules on the rocket crate
+cargo fmt --all -- --check      # formatting
+```
+
+Every push runs these checks in GitHub Actions. The rocket crate is additionally built in release mode with panicking operations (`unwrap`, `expect`, `panic!`, unchecked indexing) denied, per the MISRA-Rust ruleset in [`rocket/rocket_constraints.txt`](rocket/rocket_constraints.txt).
+
 ## Architecture
 
 ### Two-Tier Design
