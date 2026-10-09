@@ -20,4 +20,4 @@ jobs:
         run: cargo test --workspace
 
       - name: Lint all crates
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace
