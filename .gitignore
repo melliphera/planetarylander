@@ -1,2 +1,7 @@
 /target
 output.txt
+
+# coverage and profiling artefacts
+lcov.info
+*.profraw
+profile.json.gz
